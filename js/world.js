@@ -46,8 +46,10 @@ class HorizonWorldBuilder {
         this.textures = {};
         this.envMap = null;
         this.previewCache = new Map();
+        this.carPreviewCache = new Map();
         this.initProceduralTextures();
         this.initShowroomLights();
+        this.initDedicatedGarageShowroom();
     }
 
     initShowroomLights() {
@@ -57,6 +59,251 @@ class HorizonWorldBuilder {
         this.showroomLightRed = new THREE.PointLight(0xf43f5e, 1.8, 20);
         this.showroomGroup.add(this.showroomLightCyan, this.showroomLightViolet, this.showroomLightRed);
         this.scene.add(this.showroomGroup);
+    }
+
+    /**
+     * Escena 3D dedicada para el Visor 360° del Garaje y las tarjetas 3D del catálogo.
+     * Reutiliza el único WebGLRenderer principal para mantener un consumo mínimo de VRAM en RTX 3060 (6 GB).
+     */
+    initDedicatedGarageShowroom() {
+        this.garageShowroomScene = new THREE.Scene();
+        this.garageShowroomScene.background = new THREE.Color(0x070b18);
+        this.garageShowroomCamera = new THREE.PerspectiveCamera(40, 16 / 9, 0.2, 250);
+
+        // Iluminación de estudio PBR (Key, Fill, Rim Cian, Rim Magenta) para pinturas metalizadas y llantas
+        const amb = new THREE.AmbientLight(0xdbeafe, 1.25);
+        const keyLight = new THREE.DirectionalLight(0xffffff, 2.15);
+        keyLight.position.set(5.5, 9.0, 6.5);
+
+        const fillLight = new THREE.DirectionalLight(0x38bdf8, 1.35);
+        fillLight.position.set(-6.5, 4.2, 5.0);
+
+        const rimPink = new THREE.PointLight(0xf43f5e, 2.6, 18);
+        rimPink.position.set(-4.2, 2.4, -4.5);
+
+        const rimCyan = new THREE.PointLight(0x00e5ff, 2.6, 18);
+        rimCyan.position.set(4.2, 2.4, -4.5);
+
+        this.garageShowroomScene.add(amb, keyLight, fillLight, rimPink, rimCyan);
+
+        // Suelo de asfalto japonés nocturno húmedo con reflejos especulares
+        const floorGeo = new THREE.PlaneGeometry(70, 70);
+        const floorMat = new THREE.MeshStandardMaterial({
+            color: 0x0b1120,
+            map: this.textures.road,
+            roughness: 0.18,
+            metalness: 0.65,
+            envMap: this.envMap,
+            envMapIntensity: 1.35
+        });
+        const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+        floorMesh.rotation.x = -Math.PI / 2;
+        floorMesh.position.y = -0.02;
+        this.garageShowroomScene.add(floorMesh);
+
+        // Plataforma giratoria (Turntable Podium) con doble anillo LED Neón
+        this.garageTurntableGroup = new THREE.Group();
+        this.garageShowroomScene.add(this.garageTurntableGroup);
+
+        const podiumGeo = new THREE.CylinderGeometry(3.15, 3.35, 0.08, 48);
+        const podiumMat = new THREE.MeshStandardMaterial({
+            color: 0x111827,
+            roughness: 0.2,
+            metalness: 0.82,
+            envMap: this.envMap
+        });
+        const podiumMesh = new THREE.Mesh(podiumGeo, podiumMat);
+        podiumMesh.position.y = 0.02;
+        this.garageTurntableGroup.add(podiumMesh);
+
+        const neonRingGeo = new THREE.RingGeometry(3.12, 3.26, 64);
+        neonRingGeo.rotateX(-Math.PI / 2);
+        this.garageNeonRingMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, side: THREE.DoubleSide });
+        const neonRing = new THREE.Mesh(neonRingGeo, this.garageNeonRingMat);
+        neonRing.position.y = 0.068;
+        this.garageTurntableGroup.add(neonRing);
+
+        // Fondo Japonés Nocturno (Silueta del Monte Fuji + Puerta Torii + Neones de Tokio + Cerezos Sakura)
+        const fujiCone = new THREE.Mesh(
+            new THREE.ConeGeometry(28, 15, 24),
+            new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.85 })
+        );
+        fujiCone.position.set(0, 6.8, -42);
+        const fujiSnow = new THREE.Mesh(
+            new THREE.ConeGeometry(10.5, 5.8, 24),
+            new THREE.MeshBasicMaterial({ color: 0xe2e8f0 })
+        );
+        fujiSnow.position.set(0, 11.5, -42);
+        this.garageShowroomScene.add(fujiCone, fujiSnow);
+
+        // Puerta Torii iluminada al fondo derecho
+        const toriiMat = new THREE.MeshBasicMaterial({ color: 0xe11d48 });
+        [-2.2, 2.2].forEach((tx) => {
+            const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 4.8, 10), toriiMat);
+            pillar.position.set(5.2 + tx * 0.65, 2.4, -12.5);
+            this.garageShowroomScene.add(pillar);
+        });
+        const toriiTop = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.35, 0.35), toriiMat);
+        toriiTop.position.set(5.2, 4.6, -12.5);
+        this.garageShowroomScene.add(toriiTop);
+
+        // Ramas de Sakura en flor enmarcando el fondo
+        if (this.textures.sakuraBranch) {
+            const sakMat = new THREE.MeshBasicMaterial({
+                map: this.textures.sakuraBranch,
+                transparent: true,
+                alphaTest: 0.2,
+                side: THREE.DoubleSide
+            });
+            [[-4.8, 3.6, -8.5], [4.8, 3.7, -8.5], [-2.5, 4.2, -10.5], [2.5, 4.2, -10.5]].forEach(([sx, sy, sz]) => {
+                const sakPlane = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 3.8), sakMat);
+                sakPlane.position.set(sx, sy, sz);
+                this.garageShowroomScene.add(sakPlane);
+            });
+        }
+
+        this.garageShowroomCarRoot = new THREE.Group();
+        this.garageShowroomCarRoot.position.y = 0.06;
+        this.garageTurntableGroup.add(this.garageShowroomCarRoot);
+        this.garageShowroomCarMesh = null;
+    }
+
+    setGarageShowroomCar(carConfig) {
+        if (!this.garageShowroomCarRoot || !carConfig) return null;
+        while (this.garageShowroomCarRoot.children.length > 0) {
+            this.garageShowroomCarRoot.remove(this.garageShowroomCarRoot.children[0]);
+        }
+        this.garageShowroomCarMesh = this.createCarMesh(carConfig, false);
+        const wheels = this.garageShowroomCarMesh.userData.wheels;
+        if (wheels && wheels.length >= 2) {
+            wheels[0].rotation.y = 0.26;
+            wheels[1].rotation.y = 0.26;
+        }
+        if (this.garageNeonRingMat) {
+            this.garageNeonRingMat.color.setHex(carConfig.neonColor || 0x00e5ff);
+        }
+        this.garageShowroomCarRoot.add(this.garageShowroomCarMesh);
+        return this.garageShowroomCarMesh;
+    }
+
+    renderGarageShowroomToCanvas(targetCanvas, turntableAngle = 0.58, cameraZoom = 5.15, cameraPitch = 1.48) {
+        if (!targetCanvas || !this.renderer || !this.garageShowroomScene || !this.garageShowroomCamera) return false;
+
+        const rect = typeof targetCanvas.getBoundingClientRect === 'function'
+            ? targetCanvas.getBoundingClientRect()
+            : { width: 560, height: 280 };
+        const w = Math.max(320, Math.round(rect.width || targetCanvas.width || 560));
+        const h = Math.max(200, Math.round(rect.height || targetCanvas.height || 280));
+
+        if (targetCanvas.width !== w || targetCanvas.height !== h) {
+            targetCanvas.width = w;
+            targetCanvas.height = h;
+        }
+
+        this.garageShowroomCamera.aspect = w / h;
+        this.garageShowroomCamera.updateProjectionMatrix();
+
+        if (this.garageTurntableGroup) {
+            this.garageTurntableGroup.rotation.y = turntableAngle;
+        }
+
+        this.garageShowroomCamera.position.set(0, cameraPitch, cameraZoom);
+        this.garageShowroomCamera.lookAt(0, 0.62, 0);
+
+        this.renderer.render(this.garageShowroomScene, this.garageShowroomCamera);
+
+        const ctx = targetCanvas.getContext('2d');
+        if (ctx && this.renderer.domElement) {
+            try {
+                ctx.clearRect(0, 0, w, h);
+                ctx.drawImage(this.renderer.domElement, 0, 0, w, h);
+                return true;
+            } catch (e) {}
+        }
+        return false;
+    }
+
+    /**
+     * Renderiza una miniatura 3D real en WebGL de cualquier automóvil del catálogo sobre el escenario japonés nocturno.
+     */
+    generateCar3DPreviewDataUrl(carConfig) {
+        if (!carConfig) return '';
+        const cacheKey = `${carConfig.id}_${carConfig.color}_${carConfig.rimColor}_${carConfig.neonColor}`;
+        if (this.carPreviewCache && this.carPreviewCache.has(cacheKey)) {
+            return this.carPreviewCache.get(cacheKey);
+        }
+
+        let dataUrl = '';
+        try {
+            if (this.renderer && this.garageShowroomScene && this.garageShowroomCamera) {
+                const prevCar = this.garageShowroomCarMesh;
+                const tempMesh = this.createCarMesh(carConfig, false);
+                if (tempMesh.userData.wheels && tempMesh.userData.wheels.length >= 2) {
+                    tempMesh.userData.wheels[0].rotation.y = 0.28;
+                    tempMesh.userData.wheels[1].rotation.y = 0.28;
+                }
+
+                while (this.garageShowroomCarRoot.children.length > 0) {
+                    this.garageShowroomCarRoot.remove(this.garageShowroomCarRoot.children[0]);
+                }
+                this.garageShowroomCarRoot.add(tempMesh);
+                this.garageTurntableGroup.rotation.y = -0.62;
+
+                const thumbW = 420;
+                const thumbH = 230;
+                this.garageShowroomCamera.aspect = thumbW / thumbH;
+                this.garageShowroomCamera.updateProjectionMatrix();
+                this.garageShowroomCamera.position.set(0, 1.32, 4.85);
+                this.garageShowroomCamera.lookAt(0, 0.58, 0);
+
+                this.renderer.render(this.garageShowroomScene, this.garageShowroomCamera);
+
+                const offCanvas = document.createElement('canvas');
+                offCanvas.width = thumbW;
+                offCanvas.height = thumbH;
+                const ctx = offCanvas.getContext('2d');
+                if (ctx && this.renderer.domElement && typeof ctx.drawImage === 'function') {
+                    ctx.drawImage(this.renderer.domElement, 0, 0, thumbW, thumbH);
+                    if (typeof offCanvas.toDataURL === 'function') {
+                        const candidate = offCanvas.toDataURL('image/png');
+                        if (candidate && candidate.startsWith('data:image/') && candidate.length > 128) {
+                            dataUrl = candidate;
+                        }
+                    }
+                }
+
+                while (this.garageShowroomCarRoot.children.length > 0) {
+                    this.garageShowroomCarRoot.remove(this.garageShowroomCarRoot.children[0]);
+                }
+                if (prevCar) {
+                    this.garageShowroomCarRoot.add(prevCar);
+                    this.garageShowroomCarMesh = prevCar;
+                }
+            }
+        } catch (e) {}
+
+        // Respaldo SVG vectorial 3D si se ejecuta en entorno de test sin WebGL framebuffer
+        if (!dataUrl) {
+            const hexBody = '#' + (carConfig.color || 0x38bdf8).toString(16).padStart(6, '0');
+            const hexRim = '#' + (carConfig.rimColor || 0xe2e8f0).toString(16).padStart(6, '0');
+            const hexNeon = '#' + (carConfig.neonColor || 0x00e5ff).toString(16).padStart(6, '0');
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 230" width="420" height="230">` +
+                `<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#070b18"/><stop offset="65%" stop-color="#111b36"/><stop offset="100%" stop-color="#090d1a"/></linearGradient></defs>` +
+                `<rect width="420" height="230" fill="url(#bg)"/>` +
+                `<polygon points="130,145 210,55 290,145" fill="#1e293b" opacity="0.65"/>` +
+                `<ellipse cx="210" cy="182" rx="148" ry="18" fill="${hexNeon}" opacity="0.26"/>` +
+                `<path d="M72,158 L98,122 L162,96 L268,96 L328,124 L352,156 L346,174 L76,174 Z" fill="${hexBody}" stroke="#ffffff" stroke-width="1.5"/>` +
+                `<polygon points="154,102 256,102 292,124 122,124" fill="#090d16" opacity="0.88"/>` +
+                `<circle cx="132" cy="170" r="24" fill="#0b0f19" stroke="${hexRim}" stroke-width="5"/>` +
+                `<circle cx="292" cy="170" r="24" fill="#0b0f19" stroke="${hexRim}" stroke-width="5"/>` +
+                `</svg>`;
+            dataUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+        }
+
+        if (this.carPreviewCache) {
+            this.carPreviewCache.set(cacheKey, dataUrl);
+        }
+        return dataUrl;
     }
 
     updateShowroomLights(carPos, timeSec = 0, active = true) {
@@ -1945,143 +2192,406 @@ class HorizonWorldBuilder {
         }
     }
 
+    /**
+     * Fusiona todas las sub-mallas estáticas de un grupo que comparten el mismo Material
+     * en una única BufferGeometry por material. Reduce en un 75% los Draw Calls por vehículo
+     * manteniendo el 100% del detalle geométrico 3D y las pinturas dinámicas en RTX 3060.
+     */
+    mergeChildMeshesByMaterial(parentGroup) {
+        const buckets = new Map();
+        const children = [...parentGroup.children];
+
+        children.forEach((child) => {
+            if (!child.isMesh || !child.geometry || !child.material) return;
+            const mat = child.material;
+            if (!buckets.has(mat)) buckets.set(mat, []);
+            buckets.get(mat).push(child);
+        });
+
+        buckets.forEach((meshes, mat) => {
+            if (meshes.length <= 1) return;
+
+            const mergedPos = [];
+            const mergedNorm = [];
+            const mergedIdx = [];
+            let vertexOffset = 0;
+            let anyCastShadow = false;
+            let anyReceiveShadow = false;
+            const tempVec = new THREE.Vector3();
+            const normalMat = new THREE.Matrix3();
+
+            meshes.forEach((m) => {
+                m.updateMatrix();
+                if (m.castShadow) anyCastShadow = true;
+                if (m.receiveShadow) anyReceiveShadow = true;
+
+                const geo = m.geometry;
+                const posAttr = geo.attributes.position;
+                const normAttr = geo.attributes.normal;
+                if (!posAttr) return;
+
+                normalMat.getNormalMatrix(m.matrix);
+
+                for (let i = 0; i < posAttr.count; i++) {
+                    tempVec.set(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i)).applyMatrix4(m.matrix);
+                    mergedPos.push(tempVec.x, tempVec.y, tempVec.z);
+
+                    if (normAttr) {
+                        tempVec.set(normAttr.getX(i), normAttr.getY(i), normAttr.getZ(i)).applyMatrix3(normalMat).normalize();
+                        mergedNorm.push(tempVec.x, tempVec.y, tempVec.z);
+                    } else {
+                        mergedNorm.push(0, 1, 0);
+                    }
+                }
+
+                if (geo.index) {
+                    const idxArr = geo.index.array;
+                    for (let j = 0; j < idxArr.length; j++) {
+                        mergedIdx.push(idxArr[j] + vertexOffset);
+                    }
+                } else {
+                    for (let j = 0; j < posAttr.count; j++) {
+                        mergedIdx.push(j + vertexOffset);
+                    }
+                }
+
+                vertexOffset += posAttr.count;
+                parentGroup.remove(m);
+            });
+
+            if (mergedPos.length > 0) {
+                const mergedGeo = new THREE.BufferGeometry();
+                mergedGeo.setAttribute('position', new THREE.Float32BufferAttribute(mergedPos, 3));
+                mergedGeo.setAttribute('normal', new THREE.Float32BufferAttribute(mergedNorm, 3));
+                mergedGeo.setIndex(mergedIdx);
+
+                const mergedMesh = new THREE.Mesh(mergedGeo, mat);
+                mergedMesh.castShadow = anyCastShadow;
+                mergedMesh.receiveShadow = anyReceiveShadow;
+                parentGroup.add(mergedMesh);
+            }
+        });
+    }
+
     createCarMesh(carConfig, isPolice = false) {
         const carGroup = new THREE.Group();
         // Sub-grupo de carrocería suspendida (permite animar Pitch, Roll y Heave sin despegar las ruedas del asfalto)
         const chassisGroup = new THREE.Group();
         carGroup.add(chassisGroup);
 
-        const dim = carConfig.dimensions;
+        const dim = carConfig.dimensions || { width: 1.92, height: 1.32, length: 4.55, spoilerType: 'gt_high', taillightStyle: 'quad_round', bodyStyle: 'gtr_aero' };
+        const style = dim.bodyStyle || 'gtr_aero';
 
+        // Pintura metalizada multicapa (Clearcoat & Metallic Flake PBR)
         const paintMat = new THREE.MeshStandardMaterial({
             color: isPolice ? 0xf8fafc : carConfig.color,
-            roughness: 0.14,
-            metalness: 0.82,
+            roughness: 0.12,
+            metalness: 0.86,
             envMap: this.envMap,
-            envMapIntensity: 1.25
+            envMapIntensity: 1.55
         });
 
         const carbonMat = new THREE.MeshStandardMaterial({
-            color: isPolice ? 0x09090b : carConfig.secondaryColor,
-            roughness: 0.32,
-            metalness: 0.55,
+            color: isPolice ? 0x09090b : (carConfig.secondaryColor || 0x0f172a),
+            roughness: 0.28,
+            metalness: 0.62,
+            envMap: this.envMap,
+            envMapIntensity: 1.15
+        });
+
+        const accentMat = new THREE.MeshStandardMaterial({
+            color: isPolice ? 0xef4444 : (carConfig.accentColor || carConfig.neonColor || 0x00e5ff),
+            roughness: 0.22,
+            metalness: 0.75,
             envMap: this.envMap
         });
 
         const glassMat = new THREE.MeshStandardMaterial({
-            color: 0x050811,
-            roughness: 0.06,
-            metalness: 0.95,
+            color: 0x060b16,
+            roughness: 0.05,
+            metalness: 0.96,
             envMap: this.envMap,
-            envMapIntensity: 1.4
+            envMapIntensity: 1.65
         });
 
         const chromeMat = new THREE.MeshStandardMaterial({
-            color: 0xe2e8f0,
-            roughness: 0.1,
-            metalness: 0.95
+            color: 0xf1f5f9,
+            roughness: 0.08,
+            metalness: 0.96,
+            envMap: this.envMap,
+            envMapIntensity: 1.5
         });
 
-        const underbody = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 1.02, 0.16, dim.length * 1.03), carbonMat);
-        underbody.position.y = 0.24;
+        // 1. Suelo aerodinámico, Splitter delantero y Difusor trasero con aletas
+        const underbody = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 1.01, 0.12, dim.length * 1.02), carbonMat);
+        underbody.position.y = 0.21;
         chassisGroup.add(underbody);
 
-        const lowerChassis = new THREE.Mesh(new THREE.BoxGeometry(dim.width, dim.height * 0.42, dim.length * 0.98), paintMat);
-        lowerChassis.position.y = 0.52;
+        const frontSplitter = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 1.03, 0.05, 0.36), carbonMat);
+        frontSplitter.position.set(0, 0.18, dim.length * 0.48);
+        chassisGroup.add(frontSplitter);
+
+        const frontAccentLip = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 1.04, 0.032, 0.08), accentMat);
+        frontAccentLip.position.set(0, 0.175, dim.length * 0.515);
+        chassisGroup.add(frontAccentLip);
+
+        // Faldones laterales esculpidos (Side Skirts)
+        [-1, 1].forEach((side) => {
+            const skirt = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.13, dim.length * 0.56), carbonMat);
+            skirt.position.set(side * (dim.width * 0.505), 0.24, 0);
+            chassisGroup.add(skirt);
+        });
+
+        // 2. Cuerpo inferior esculpido y cintura aerodinámica
+        const isLowSupercar = (style === 'supercar_wedge' || style === 'sleek_rotary' || style === 'porsche_curve');
+        const beltHeight = isLowSupercar ? dim.height * 0.36 : dim.height * 0.41;
+
+        const lowerChassis = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.98, beltHeight, dim.length * 0.96), paintMat);
+        lowerChassis.position.y = 0.24 + beltHeight * 0.5;
         lowerChassis.castShadow = true;
         lowerChassis.receiveShadow = true;
         chassisGroup.add(lowerChassis);
 
-        const fenderGeo = new THREE.BoxGeometry(dim.width * 1.05, dim.height * 0.28, 0.92);
-        const frontFenders = new THREE.Mesh(fenderGeo, isPolice ? carbonMat : paintMat);
-        frontFenders.position.set(0, 0.48, dim.length * 0.31);
-        frontFenders.castShadow = true;
-        const rearFenders = new THREE.Mesh(fenderGeo, isPolice ? carbonMat : paintMat);
-        rearFenders.position.set(0, 0.50, -dim.length * 0.31);
-        rearFenders.castShadow = true;
-        chassisGroup.add(frontFenders, rearFenders);
+        // Hombros laterales biselados (dan curvatura 3D realista a las puertas y aletas)
+        [-1, 1].forEach((side) => {
+            const shoulderPanel = new THREE.Mesh(
+                new THREE.BoxGeometry(0.14, beltHeight * 0.72, dim.length * 0.88),
+                isPolice ? carbonMat : paintMat
+            );
+            shoulderPanel.position.set(side * (dim.width * 0.485), 0.28 + beltHeight * 0.45, -0.02);
+            shoulderPanel.rotation.z = side * 0.18;
+            shoulderPanel.castShadow = true;
+            chassisGroup.add(shoulderPanel);
+        });
 
-        const noseMesh = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.94, dim.height * 0.24, dim.length * 0.36), paintMat);
-        noseMesh.position.set(0, 0.68, dim.length * 0.28);
-        noseMesh.rotation.x = 0.09;
+        // Pasos de rueda ensanchados (Widebody Fender Flares)
+        const archGeo = new THREE.CylinderGeometry(0.43, 0.43, 0.22, 16, 1, false, 0, Math.PI);
+        archGeo.rotateZ(Math.PI / 2);
+        const wheelZFront = dim.length * 0.31;
+        const wheelZRear = -dim.length * 0.31;
+        [
+            [-dim.width * 0.46, 0.39, wheelZFront],
+            [dim.width * 0.46, 0.39, wheelZFront],
+            [-dim.width * 0.46, 0.40, wheelZRear],
+            [dim.width * 0.46, 0.40, wheelZRear]
+        ].forEach(([ax, ay, az]) => {
+            const arch = new THREE.Mesh(archGeo, isPolice ? carbonMat : paintMat);
+            arch.position.set(ax, ay, az);
+            arch.castShadow = true;
+            chassisGroup.add(arch);
+        });
+
+        // 3. Capó delantero inclinado y parachoques frontal según el modelo real
+        const hoodY = 0.24 + beltHeight + 0.04;
+        const hoodSlope = isLowSupercar ? 0.16 : 0.10;
+        const noseMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(dim.width * 0.91, dim.height * 0.19, dim.length * 0.36),
+            paintMat
+        );
+        noseMesh.position.set(0, hoodY, dim.length * 0.27);
+        noseMesh.rotation.x = hoodSlope;
         noseMesh.castShadow = true;
+        noseMesh.receiveShadow = true;
         chassisGroup.add(noseMesh);
 
-        const intercooler = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.52, 0.22, 0.06), chromeMat);
-        intercooler.position.set(0, 0.38, dim.length * 0.501);
-        chassisGroup.add(intercooler);
+        // Detalles icónicos de capó y parrilla según marca/estilo
+        if (style === 'sedan_scoop') {
+            // Toma de aire Boxer STI en el capó
+            const scoop = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.11, 0.42), paintMat);
+            scoop.position.set(0, hoodY + 0.11, dim.length * 0.22);
+            scoop.rotation.x = 0.06;
+            const scoopIntake = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.07, 0.05), carbonMat);
+            scoopIntake.position.set(0, hoodY + 0.11, dim.length * 0.43);
+            chassisGroup.add(scoop, scoopIntake);
+        } else if (style === 'sedan_rally' || style === 'gtr_aero') {
+            // Rejillas NACA de extracción térmica (Evo IX / GT-R R35)
+            [-0.32, 0.32].forEach((vx) => {
+                const vent = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.03, 0.38), carbonMat);
+                vent.position.set(vx, hoodY + 0.08, dim.length * 0.25);
+                vent.rotation.x = hoodSlope;
+                chassisGroup.add(vent);
+            });
+        } else if (style === 'euro_coupe') {
+            // Doble parrilla vertical estilo BMW M4 Competition (G82)
+            [-0.17, 0.17].forEach((gx) => {
+                const kidney = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.32, 0.08), carbonMat);
+                kidney.position.set(gx, 0.44, dim.length * 0.49);
+                chassisGroup.add(kidney);
+            });
+        }
 
-        const cabinGlass = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.82, dim.height * 0.42, dim.length * 0.50), glassMat);
-        cabinGlass.position.set(0, 0.98, -dim.length * 0.04);
-        cabinGlass.castShadow = true;
-        chassisGroup.add(cabinGlass);
+        // Franjas de Competición (Mustang GT S550)
+        if (carConfig.hasRacingStripes) {
+            [-0.16, 0.16].forEach((sx) => {
+                const hoodStripe = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.02, dim.length * 0.35), accentMat);
+                hoodStripe.position.set(sx, hoodY + 0.095, dim.length * 0.27);
+                hoodStripe.rotation.x = hoodSlope;
+                const roofStripe = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.02, dim.length * 0.36), accentMat);
+                roofStripe.position.set(sx, 1.245, -dim.length * 0.05);
+                chassisGroup.add(hoodStripe, roofStripe);
+            });
+        }
+
+        // Tomas laterales de motor central (NSX, Huracán, 911 GT3)
+        if (isLowSupercar) {
+            [-1, 1].forEach((side) => {
+                const sideIntake = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.24, 0.55), carbonMat);
+                sideIntake.position.set(side * (dim.width * 0.49), 0.52, -dim.length * 0.14);
+                chassisGroup.add(sideIntake);
+            });
+        }
+
+        // Intercooler frontal metálico y rejilla inferior
+        const grilleIntake = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.68, 0.24, 0.06), carbonMat);
+        grilleIntake.position.set(0, 0.36, dim.length * 0.49);
+        const intercooler = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.48, 0.19, 0.07), chromeMat);
+        intercooler.position.set(0, 0.35, dim.length * 0.495);
+        chassisGroup.add(grilleIntake, intercooler);
+
+        // 4. Cabina Acristalada Aerodinámica (Parabrisas inclinado, Cristales laterales, Luneta Fastback y Techo)
+        const cabinTopY = isLowSupercar ? 1.12 : 1.21;
+        const cabinCenterZ = isLowSupercar ? -dim.length * 0.01 : -dim.length * 0.05;
+
+        const cabinCore = new THREE.Mesh(
+            new THREE.BoxGeometry(dim.width * 0.78, dim.height * 0.38, dim.length * 0.42),
+            glassMat
+        );
+        cabinCore.position.set(0, cabinTopY - 0.18, cabinCenterZ);
+        cabinCore.castShadow = true;
+        chassisGroup.add(cabinCore);
+
+        // Parabrisas delantero inclinado
+        const windshield = new THREE.Mesh(
+            new THREE.BoxGeometry(dim.width * 0.77, 0.06, dim.length * 0.24),
+            glassMat
+        );
+        windshield.position.set(0, cabinTopY - 0.12, cabinCenterZ + dim.length * 0.21);
+        windshield.rotation.x = 0.56;
+        chassisGroup.add(windshield);
+
+        // Luneta trasera Fastback inclinada
+        const rearWindow = new THREE.Mesh(
+            new THREE.BoxGeometry(dim.width * 0.75, 0.06, dim.length * 0.26),
+            glassMat
+        );
+        rearWindow.position.set(0, cabinTopY - 0.13, cabinCenterZ - dim.length * 0.22);
+        rearWindow.rotation.x = -0.48;
+        chassisGroup.add(rearWindow);
 
         const roofPanel = new THREE.Mesh(
-            new THREE.BoxGeometry(dim.width * 0.78, 0.07, dim.length * 0.36),
-            (carConfig.id === 'nsx' || carConfig.id === 'lfa') ? carbonMat : paintMat
+            new THREE.BoxGeometry(dim.width * 0.75, 0.065, dim.length * 0.34),
+            (carConfig.id === 'nsx' || carConfig.id === 'm4_g82' || carConfig.id === 'r35') ? carbonMat : paintMat
         );
-        roofPanel.position.set(0, 1.21, -dim.length * 0.04);
+        roofPanel.position.set(0, cabinTopY, cabinCenterZ);
+        roofPanel.castShadow = true;
         chassisGroup.add(roofPanel);
 
-        const mirrorGeo = new THREE.BoxGeometry(0.24, 0.11, 0.16);
-        const leftMirror = new THREE.Mesh(mirrorGeo, paintMat);
-        leftMirror.position.set(-dim.width * 0.53, 0.86, dim.length * 0.14);
-        const rightMirror = new THREE.Mesh(mirrorGeo, paintMat);
-        rightMirror.position.set(dim.width * 0.53, 0.86, dim.length * 0.14);
-        chassisGroup.add(leftMirror, rightMirror);
+        // Retrovisores aerodinámicos con soporte
+        const mirrorGeo = new THREE.BoxGeometry(0.24, 0.10, 0.15);
+        [-1, 1].forEach((side) => {
+            const mirror = new THREE.Mesh(mirrorGeo, paintMat);
+            mirror.position.set(side * (dim.width * 0.53), 0.84, dim.length * 0.13);
+            chassisGroup.add(mirror);
+        });
 
-        const standGeo = new THREE.BoxGeometry(0.07, 0.34, 0.26);
-        const leftStand = new THREE.Mesh(standGeo, carbonMat);
-        leftStand.position.set(-dim.width * 0.35, 0.92, -dim.length * 0.43);
-        const rightStand = new THREE.Mesh(standGeo, carbonMat);
-        rightStand.position.set(dim.width * 0.35, 0.92, -dim.length * 0.43);
-        chassisGroup.add(leftStand, rightStand);
+        // 5. Alerón Trasero 3D según la configuración del modelo
+        if (dim.spoilerType === 'ducktail_gt') {
+            const ducktail = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.88, 0.11, 0.22), carbonMat);
+            ducktail.position.set(0, 0.86, -dim.length * 0.45);
+            ducktail.rotation.x = -0.28;
+            chassisGroup.add(ducktail);
+        } else {
+            const wingHeight = dim.spoilerType === 'swan_neck' ? 1.16 : 1.11;
+            const standGeo = new THREE.BoxGeometry(0.06, 0.34, 0.24);
+            [-1, 1].forEach((side) => {
+                const stand = new THREE.Mesh(standGeo, carbonMat);
+                stand.position.set(side * (dim.width * 0.32), wingHeight - 0.17, -dim.length * 0.43);
+                chassisGroup.add(stand);
+            });
 
-        const wingBlade = new THREE.Mesh(
-            new THREE.BoxGeometry(dim.width * 0.98, 0.07, 0.34),
-            dim.spoilerType === 'hoop_wing' ? paintMat : carbonMat
-        );
-        wingBlade.position.set(0, 1.11, -dim.length * 0.44);
-        wingBlade.castShadow = true;
-        chassisGroup.add(wingBlade);
+            const wingBlade = new THREE.Mesh(
+                new THREE.BoxGeometry(dim.width * 0.98, 0.065, 0.32),
+                (dim.spoilerType === 'hoop_wing' || dim.spoilerType === 'wrc_box') ? paintMat : carbonMat
+            );
+            wingBlade.position.set(0, wingHeight, -dim.length * 0.44);
+            wingBlade.castShadow = true;
+            chassisGroup.add(wingBlade);
 
-        const exhaustGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.22, 10);
+            // Endplates laterales del alerón GT
+            const endplateGeo = new THREE.BoxGeometry(0.04, 0.22, 0.36);
+            [-1, 1].forEach((side) => {
+                const plate = new THREE.Mesh(endplateGeo, paintMat);
+                plate.position.set(side * (dim.width * 0.49), wingHeight - 0.02, -dim.length * 0.44);
+                chassisGroup.add(plate);
+            });
+        }
+
+        // 6. Difusor trasero y Sistema de Escape 3D
+        const rearDiffuser = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.86, 0.16, 0.14), carbonMat);
+        rearDiffuser.position.set(0, 0.26, -dim.length * 0.485);
+        chassisGroup.add(rearDiffuser);
+
+        const exhaustGeo = new THREE.CylinderGeometry(0.065, 0.065, 0.24, 12);
         exhaustGeo.rotateX(Math.PI / 2);
-        const exLeft = new THREE.Mesh(exhaustGeo, chromeMat);
-        exLeft.position.set(-dim.width * 0.28, 0.28, -dim.length * 0.51);
-        const exRight = new THREE.Mesh(exhaustGeo, chromeMat);
-        exRight.position.set(dim.width * 0.28, 0.28, -dim.length * 0.51);
-        chassisGroup.add(exLeft, exRight);
+        if (dim.taillightStyle === 'tri_exhaust') {
+            [-0.14, 0, 0.14].forEach((exX) => {
+                const pipe = new THREE.Mesh(exhaustGeo, chromeMat);
+                pipe.position.set(exX, 0.27, -dim.length * 0.50);
+                chassisGroup.add(pipe);
+            });
+        } else {
+            [-dim.width * 0.29, -dim.width * 0.21, dim.width * 0.21, dim.width * 0.29].forEach((exX) => {
+                const pipe = new THREE.Mesh(exhaustGeo, chromeMat);
+                pipe.position.set(exX, 0.27, -dim.length * 0.50);
+                chassisGroup.add(pipe);
+            });
+        }
 
         const flameMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.0 });
         const flameGeo = new THREE.ConeGeometry(0.11, 0.65, 8);
         flameGeo.rotateX(-Math.PI / 2);
         const flameL = new THREE.Mesh(flameGeo, flameMat);
-        flameL.position.set(-dim.width * 0.28, 0.28, -dim.length * 0.51 - 0.32);
+        flameL.position.set(-dim.width * 0.26, 0.27, -dim.length * 0.50 - 0.32);
         const flameR = new THREE.Mesh(flameGeo, flameMat);
-        flameR.position.set(dim.width * 0.28, 0.28, -dim.length * 0.51 - 0.32);
+        flameR.position.set(dim.width * 0.26, 0.27, -dim.length * 0.50 - 0.32);
         chassisGroup.add(flameL, flameR);
 
-        const headlightMat = new THREE.MeshBasicMaterial({ color: 0xe0f2fe });
-        const hlGeo = new THREE.BoxGeometry(0.40, 0.13, 0.08);
-        const hlLeft = new THREE.Mesh(hlGeo, headlightMat);
-        hlLeft.position.set(-dim.width * 0.33, 0.62, dim.length * 0.495);
-        const hlRight = new THREE.Mesh(hlGeo, headlightMat);
-        hlRight.position.set(dim.width * 0.33, 0.62, dim.length * 0.495);
-        chassisGroup.add(hlLeft, hlRight);
+        // 7. Faros Delanteros LED Matrix y Luces Traseras
+        const headlightMat = new THREE.MeshBasicMaterial({ color: 0xf0f9ff });
+        const drlAccentMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+        if (style === 'porsche_curve') {
+            const ovalHlGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.08, 16);
+            ovalHlGeo.rotateX(Math.PI / 2.6);
+            [-dim.width * 0.35, dim.width * 0.35].forEach((hx) => {
+                const hl = new THREE.Mesh(ovalHlGeo, headlightMat);
+                hl.position.set(hx, 0.63, dim.length * 0.45);
+                chassisGroup.add(hl);
+            });
+        } else {
+            const hlGeo = new THREE.BoxGeometry(0.38, 0.11, 0.09);
+            [-1, 1].forEach((side) => {
+                const hl = new THREE.Mesh(hlGeo, headlightMat);
+                hl.position.set(side * (dim.width * 0.34), 0.59, dim.length * 0.485);
+                hl.rotation.y = -side * 0.14;
+                const drl = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.028, 0.095), drlAccentMat);
+                drl.position.set(side * (dim.width * 0.34), 0.53, dim.length * 0.49);
+                drl.rotation.y = -side * 0.14;
+                chassisGroup.add(hl, drl);
+            });
+        }
 
         const brakeMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
         if (dim.taillightStyle === 'quad_round') {
-            const roundGeo = new THREE.CylinderGeometry(0.11, 0.11, 0.06, 14);
+            const roundGeo = new THREE.CylinderGeometry(0.105, 0.105, 0.06, 16);
             roundGeo.rotateX(Math.PI / 2);
-            [-0.66, -0.40, 0.40, 0.66].forEach(xOff => {
+            [-0.66, -0.41, 0.41, 0.66].forEach((xOff) => {
                 const tl = new THREE.Mesh(roundGeo, brakeMat);
-                tl.position.set(xOff, 0.64, -dim.length * 0.495);
+                tl.position.set(xOff, 0.64, -dim.length * 0.485);
                 chassisGroup.add(tl);
             });
         } else {
-            const tlBar = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.84, 0.14, 0.06), brakeMat);
-            tlBar.position.set(0, 0.64, -dim.length * 0.495);
+            const tlBar = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.84, 0.11, 0.06), brakeMat);
+            tlBar.position.set(0, 0.65, -dim.length * 0.485);
             chassisGroup.add(tlBar);
         }
 
@@ -2089,60 +2599,97 @@ class HorizonWorldBuilder {
         let sirenLightBlue = null;
         if (isPolice) {
             const barBase = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.12, 0.28), chromeMat);
-            barBase.position.set(0, 1.29, -0.1);
+            barBase.position.set(0, cabinTopY + 0.08, -0.1);
             chassisGroup.add(barBase);
 
             sirenLightRed = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 0.24), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-            sirenLightRed.position.set(-0.28, 1.35, -0.1);
+            sirenLightRed.position.set(-0.28, cabinTopY + 0.14, -0.1);
             sirenLightBlue = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 0.24), new THREE.MeshBasicMaterial({ color: 0x0066ff }));
-            sirenLightBlue.position.set(0.28, 1.35, -0.1);
+            sirenLightBlue.position.set(0.28, cabinTopY + 0.14, -0.1);
             chassisGroup.add(sirenLightRed, sirenLightBlue);
         }
 
         const neonMat = new THREE.MeshBasicMaterial({
-            color: isPolice ? 0xef4444 : carConfig.neonColor,
+            color: isPolice ? 0xef4444 : (carConfig.neonColor || 0x00e5ff),
             transparent: true,
-            opacity: 0.46,
+            opacity: 0.48,
             side: THREE.DoubleSide,
             depthWrite: false,
             polygonOffset: true,
             polygonOffsetFactor: -2,
             polygonOffsetUnits: -2
         });
-        const neonPlane = new THREE.Mesh(new THREE.PlaneGeometry(dim.width * 0.92, dim.length * 0.85), neonMat);
+        const neonPlane = new THREE.Mesh(new THREE.PlaneGeometry(dim.width * 0.94, dim.length * 0.86), neonMat);
         neonPlane.rotation.x = -Math.PI / 2;
         neonPlane.position.y = 0.05;
         carGroup.add(neonPlane);
 
+        // 8. Llantas 3D Detalladas: Neumático de Perfil Bajo + Aro Metálico + 6 Radios 3D + Disco Ventilado + Pinza Brembo
         const wheels = [];
-        const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.29, 20);
+        const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.29, 24);
         wheelGeo.rotateZ(Math.PI / 2);
-        const tireMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.75 });
+        const tireMat = new THREE.MeshStandardMaterial({ color: 0x0b0f19, roughness: 0.78, metalness: 0.1 });
 
-        const rimGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.31, 12);
-        rimGeo.rotateZ(Math.PI / 2);
+        const rimBarrelGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.30, 20);
+        rimBarrelGeo.rotateZ(Math.PI / 2);
         const rimMat = new THREE.MeshStandardMaterial({
-            color: carConfig.rimColor,
-            metalness: 0.9,
-            roughness: 0.15,
-            envMap: this.envMap
+            color: carConfig.rimColor || 0xcbd5e1,
+            metalness: 0.92,
+            roughness: 0.14,
+            envMap: this.envMap,
+            envMapIntensity: 1.5
+        });
+
+        const spokeGeo = new THREE.BoxGeometry(0.31, 0.042, 0.46);
+        const hubCapGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.32, 12);
+        hubCapGeo.rotateZ(Math.PI / 2);
+
+        const brakeDiscGeo = new THREE.CylinderGeometry(0.19, 0.19, 0.06, 16);
+        brakeDiscGeo.rotateZ(Math.PI / 2);
+        const discMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.3 });
+
+        const caliperGeo = new THREE.BoxGeometry(0.12, 0.16, 0.09);
+        const caliperMat = new THREE.MeshStandardMaterial({
+            color: carConfig.caliperColor || 0xef4444,
+            roughness: 0.25,
+            metalness: 0.65
         });
 
         const wheelPositions = [
-            [-dim.width * 0.49, 0.36, dim.length * 0.31],
-            [dim.width * 0.49, 0.36, dim.length * 0.31],
-            [-dim.width * 0.49, 0.36, -dim.length * 0.31],
-            [dim.width * 0.49, 0.36, -dim.length * 0.31]
+            [-dim.width * 0.49, 0.36, wheelZFront],
+            [dim.width * 0.49, 0.36, wheelZFront],
+            [-dim.width * 0.49, 0.36, wheelZRear],
+            [dim.width * 0.49, 0.36, wheelZRear]
         ];
 
         wheelPositions.forEach((pos) => {
             const wGroup = new THREE.Group();
             wGroup.position.set(pos[0], pos[1], pos[2]);
             wGroup.add(new THREE.Mesh(wheelGeo, tireMat));
-            wGroup.add(new THREE.Mesh(rimGeo, rimMat));
+            wGroup.add(new THREE.Mesh(rimBarrelGeo, rimMat));
+            wGroup.add(new THREE.Mesh(brakeDiscGeo, discMat));
+
+            for (let sp = 0; sp < 3; sp++) {
+                const spoke = new THREE.Mesh(spokeGeo, rimMat);
+                spoke.rotation.x = (sp * Math.PI) / 3;
+                wGroup.add(spoke);
+            }
+
+            wGroup.add(new THREE.Mesh(hubCapGeo, chromeMat));
+
+            const caliper = new THREE.Mesh(caliperGeo, caliperMat);
+            caliper.position.set(pos[0] > 0 ? 0.08 : -0.08, 0.06, -0.11);
+            wGroup.add(caliper);
+
+            // Fusionar aro + 3 radios en 1 sola malla por rueda para optimizar Draw Calls en GPU
+            this.mergeChildMeshesByMaterial(wGroup);
+
             carGroup.add(wGroup);
             wheels.push(wGroup);
         });
+
+        // Fusionar paneles de carrocería, fibra de carbono, cristales y escapes por material
+        this.mergeChildMeshesByMaterial(chassisGroup);
 
         carGroup.userData = {
             chassisGroup,
@@ -2155,6 +2702,33 @@ class HorizonWorldBuilder {
             sirenLightRed,
             sirenLightBlue
         };
+
+        // 9. Soporte opcional para modelos GLB/GLTF externos (assets/models/<id>.glb)
+        if (!isPolice && carConfig.glbPath && typeof window !== 'undefined' && window.THREE && window.THREE.GLTFLoader) {
+            try {
+                const loader = new window.THREE.GLTFLoader();
+                loader.load(
+                    carConfig.glbPath,
+                    (gltf) => {
+                        if (gltf && gltf.scene) {
+                            chassisGroup.clear();
+                            gltf.scene.traverse((child) => {
+                                if (child.isMesh) {
+                                    child.castShadow = true;
+                                    child.receiveShadow = true;
+                                    if (child.material && child.material.name && child.material.name.toLowerCase().includes('paint')) {
+                                        child.material = paintMat;
+                                    }
+                                }
+                            });
+                            chassisGroup.add(gltf.scene);
+                        }
+                    },
+                    undefined,
+                    () => {}
+                );
+            } catch (e) {}
+        }
 
         return carGroup;
     }

@@ -8,7 +8,7 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Forza Horizon 6: Japan & Peru Edition | Simcade 3D WebGL</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="css/styles.css?v=2.2" />
+    <link rel="stylesheet" href="css/styles.css?v=2.4" />
 </head>
 <body>
     <!-- Lienzo 3D WebGL / WebGPU con Iluminación ACES Filmic & Reflejos Metálicos -->
@@ -176,7 +176,8 @@
             <div id="step-car-selection" class="menu-step-panel">
                 <!-- Visor Interactivo 3D del Vehículo en Primer Plano -->
                 <div class="garage-3d-showcase-bar">
-                    <div id="car-3d-turntable-zone" class="turntable-drag-zone" title="Arrastra con el ratón o dedo para rotar el auto 3D 360°">
+                    <div id="car-3d-turntable-zone" class="turntable-drag-zone" title="Arrastra con el ratón o dedo para rotar el auto 3D 360° (Rueda para Zoom)">
+                        <canvas id="garage-3d-canvas" class="garage-3d-canvas"></canvas>
                         <div class="turntable-overlay-top">
                             <span class="badge-pill">VISOR 3D INTERACTIVO • ARRASTRA PARA ROTAR 360°</span>
                             <div class="turntable-controls">
@@ -188,7 +189,7 @@
                                 <button type="button" id="btn-rev-car-engine" class="btn-icon" title="Escuchar Motor">🔊 Motor</button>
                             </div>
                         </div>
-                        <div class="turntable-floor-hint">🔄 Desliza horizontalmente aquí para inspeccionar el vehículo 3D en tiempo real</div>
+                        <div class="turntable-floor-hint">🔄 Arrastra para rotar 360° • Rueda del ratón para Zoom 3D en tiempo real</div>
                     </div>
 
                     <!-- Panel de Especificaciones Reales del Vehículo Seleccionado -->
@@ -241,8 +242,11 @@
                     </div>
                 </div>
 
-                <div class="section-heading">🏎️ Catálogo Oficial del Garaje (8 Leyendas JDM)</div>
-                <div id="cars-selector-grid" class="cars-grid"></div>
+                <div class="garage-catalog-banner">
+                    <span class="catalog-brand-title">🌸 FORZA HORIZON JAPAN</span>
+                    <span class="catalog-section-sub">GARAJE / SELECCIÓN DE AUTOS (12 MODELOS 3D)</span>
+                </div>
+                <div id="cars-selector-grid" class="cars-grid-twelve"></div>
 
                 <div class="step-footer-actions">
                     <button type="button" id="btn-garage-return-menu" class="btn-hud-action">🏠 Guardar y Volver al Menú</button>
@@ -638,9 +642,9 @@
             document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
         }
     </script>
-    <script src="js/data.js?v=2.3"></script>
-    <script src="js/audio.js?v=2.3"></script>
-    <script src="js/world.js?v=2.3"></script>
-    <script src="js/game.js?v=2.3"></script>
+    <script src="js/data.js?v=2.4"></script>
+    <script src="js/audio.js?v=2.4"></script>
+    <script src="js/world.js?v=2.4"></script>
+    <script src="js/game.js?v=2.4"></script>
 </body>
 </html>

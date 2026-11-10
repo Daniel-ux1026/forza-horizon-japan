@@ -5,6 +5,7 @@
 class HorizonGameEngine {
     constructor() {
         this.canvas = document.getElementById('game-canvas');
+        this.garageCanvas = document.getElementById('garage-3d-canvas');
         this.minimapCanvas = document.getElementById('minimap-canvas');
         this.minimapCtx = this.minimapCanvas ? this.minimapCanvas.getContext('2d') : null;
 
@@ -20,9 +21,12 @@ class HorizonGameEngine {
         this.optionsOriginState = 'MAIN_MENU';
         this.mainMenuFocusIndex = 0;
         this.turntableAngle = 0.55;
+        this.turntableZoom = 5.05;
+        this.turntablePitch = 1.44;
         this.turntableAutoRotate = true;
         this.isDraggingTurntable = false;
         this.turntableLastX = 0;
+        this.turntableLastY = 0;
         this.showroomOrbitAngle = 0.4;
         this.loadingTimers = [];
         this.customCarColors = {};
@@ -278,6 +282,19 @@ class HorizonGameEngine {
         this.currentCarConfig = carData;
         this.playerCarMesh = this.world.createCarMesh(carData, false);
         this.scene.add(this.playerCarMesh);
+
+        // Sincronizar modelo 3D en el Showroom 360° del Garaje
+        if (this.world && typeof this.world.setGarageShowroomCar === 'function') {
+            this.world.setGarageShowroomCar(carData);
+            if (this.garageCanvas && this.menuState === 'CAR_SELECTION') {
+                this.world.renderGarageShowroomToCanvas(
+                    this.garageCanvas,
+                    this.turntableAngle,
+                    this.turntableZoom,
+                    this.turntablePitch
+                );
+            }
+        }
 
         // Sincronizar selectores de color del taller de tuning
         const bodyPicker = document.getElementById('tuning-body-color');
@@ -1847,21 +1864,25 @@ class HorizonGameEngine {
             setupChangeTrackBtn.addEventListener('click', () => this.navigateTo('TRACK_SELECTION'));
         }
 
-        // Controles del Visor 3D 360° en el Garaje
+        // Controles del Visor 3D 360° en el Garaje (Rotación 360°, Inclinación y Zoom con Rueda)
         const turntableZone = document.getElementById('car-3d-turntable-zone');
         if (turntableZone) {
-            const startDrag = (clientX) => {
+            const startDrag = (clientX, clientY = 0) => {
                 this.isDraggingTurntable = true;
                 this.turntableAutoRotate = false;
                 this.turntableLastX = clientX;
+                this.turntableLastY = clientY;
                 const autoBtn = document.getElementById('btn-rotate-car-auto');
                 if (autoBtn) autoBtn.classList.remove('active');
             };
-            const moveDrag = (clientX) => {
+            const moveDrag = (clientX, clientY = 0) => {
                 if (!this.isDraggingTurntable) return;
                 const dx = clientX - this.turntableLastX;
+                const dy = clientY - this.turntableLastY;
                 this.turntableLastX = clientX;
+                this.turntableLastY = clientY;
                 this.turntableAngle += dx * 0.012;
+                this.turntablePitch = THREE.MathUtils.clamp(this.turntablePitch + dy * 0.005, 0.85, 2.35);
             };
             const endDrag = () => {
                 this.isDraggingTurntable = false;
@@ -1869,18 +1890,23 @@ class HorizonGameEngine {
 
             turntableZone.addEventListener('mousedown', (e) => {
                 if (e.target.closest('button')) return;
-                startDrag(e.clientX);
+                startDrag(e.clientX, e.clientY);
             });
-            window.addEventListener('mousemove', (e) => moveDrag(e.clientX));
+            window.addEventListener('mousemove', (e) => moveDrag(e.clientX, e.clientY));
             window.addEventListener('mouseup', endDrag);
+
+            turntableZone.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                this.turntableZoom = THREE.MathUtils.clamp(this.turntableZoom + (e.deltaY > 0 ? 0.28 : -0.28), 3.7, 6.8);
+            }, { passive: false });
 
             turntableZone.addEventListener('touchstart', (e) => {
                 if (e.target.closest('button') || !e.touches[0]) return;
-                startDrag(e.touches[0].clientX);
+                startDrag(e.touches[0].clientX, e.touches[0].clientY);
             }, { passive: true });
             turntableZone.addEventListener('touchmove', (e) => {
                 if (!e.touches[0]) return;
-                moveDrag(e.touches[0].clientX);
+                moveDrag(e.touches[0].clientX, e.touches[0].clientY);
             }, { passive: true });
             turntableZone.addEventListener('touchend', endDrag);
         }
@@ -1935,27 +1961,46 @@ class HorizonGameEngine {
             });
         }
 
-        // 1. Renderizar los 8 Autos JDM
+        // 1. Renderizar los 12 Vehículos 3D del Catálogo del Garaje (estilo Forza Horizon Japan)
         const carsGrid = document.getElementById('cars-selector-grid');
         if (carsGrid) {
             carsGrid.innerHTML = '';
             window.FH6_DATA.cars.forEach((car, idx) => {
-                const hexColor = '#' + car.color.toString(16).padStart(6, '0');
+                const preview3DUrl = this.world.generateCar3DPreviewDataUrl(car);
+                const parts = (car.classRating || 'S1 850').split(' ');
+                const tierStr = parts[0] || 'S1';
+                const numStr = parts[1] || '850';
+                const tierClass = tierStr === 'A' ? 'tier-a' : 'tier-s1';
+                const brandShort = (car.brand || 'JDM').slice(0, 6);
+
                 const card = document.createElement('div');
-                card.className = `car-card ${idx === this.selectedCarIndex ? 'active' : ''}`;
+                card.className = `car-card car-card-3d ${idx === this.selectedCarIndex ? 'active' : ''}`;
+                card.setAttribute('data-car-id', car.id);
                 card.innerHTML = `
-                    <div class="car-card-header">
-                        <span class="car-color-dot" style="background:${hexColor}"></span>
-                        <span class="car-class-pill">${car.classRating}</span>
+                    <div class="car-card-3d-wrap">
+                        <img class="car-card-3d-img" src="${preview3DUrl}" alt="${car.name}" />
+                        <span class="car-card-3d-tag">MODELO 3D • 360°</span>
                     </div>
-                    <h4>${car.name}</h4>
-                    <p class="car-category">${car.category}</p>
-                    <p class="car-desc">${car.description}</p>
-                    <div class="car-stats">
-                        <div class="stat-row"><span>VEL (${car.physics.maxSpeedKmh} km/h)</span><div class="stat-bar"><div style="width:${car.stats.speed}%"></div></div></div>
-                        <div class="stat-row"><span>ACELERACIÓN</span><div class="stat-bar"><div style="width:${car.stats.acceleration}%"></div></div></div>
-                        <div class="stat-row"><span>MANEJO</span><div class="stat-bar"><div style="width:${car.stats.handling}%"></div></div></div>
-                        <div class="stat-row"><span>DERRAPE (DRIFT)</span><div class="stat-bar"><div style="width:${car.stats.drift}%"></div></div></div>
+                    <div class="car-card-footer">
+                        <div class="car-card-identity-row">
+                            <div class="car-brand-left">
+                                <span class="car-brand-emblem">${brandShort}</span>
+                                <div class="car-title-stack">
+                                    <h4>${car.name}</h4>
+                                    <span class="car-year-sub">${car.year} • ${car.brand || 'JDM'}</span>
+                                </div>
+                            </div>
+                            <span class="forza-pi-badge">
+                                <span class="forza-pi-tier ${tierClass}">${tierStr}</span>
+                                <span class="forza-pi-num">${numStr}</span>
+                            </span>
+                        </div>
+                        <div class="car-mini-stats">
+                            <div class="car-mini-stat"><span>VEL</span><b>${car.physics.maxSpeedKmh} km/h</b></div>
+                            <div class="car-mini-stat"><span>ACEL</span><b>${car.stats.acceleration}/100</b></div>
+                            <div class="car-mini-stat"><span>MANEJO</span><b>${car.stats.handling}/100</b></div>
+                            <div class="car-mini-stat"><span>DRIFT</span><b>${car.stats.drift}/100</b></div>
+                        </div>
                     </div>
                 `;
                 card.addEventListener('mouseenter', () => window.horizonAudio.playUiHover());
@@ -2105,17 +2150,31 @@ class HorizonGameEngine {
             const neonHex = document.getElementById('tuning-neon-color')?.value;
             const rimHex = document.getElementById('tuning-rim-color')?.value;
 
+            const showroomMesh = this.world ? this.world.garageShowroomCarMesh : null;
+
             if (bodyHex && this.playerCarMesh.userData.paintMat) {
                 this.currentCarConfig.color = parseInt(bodyHex.replace('#', ''), 16);
                 this.playerCarMesh.userData.paintMat.color.set(bodyHex);
+                if (showroomMesh && showroomMesh.userData.paintMat) {
+                    showroomMesh.userData.paintMat.color.set(bodyHex);
+                }
             }
             if (neonHex && this.playerCarMesh.userData.neonMat) {
                 this.currentCarConfig.neonColor = parseInt(neonHex.replace('#', ''), 16);
                 this.playerCarMesh.userData.neonMat.color.set(neonHex);
+                if (showroomMesh && showroomMesh.userData.neonMat) {
+                    showroomMesh.userData.neonMat.color.set(neonHex);
+                }
+                if (this.world && this.world.garageNeonRingMat) {
+                    this.world.garageNeonRingMat.color.set(neonHex);
+                }
             }
             if (rimHex && this.playerCarMesh.userData.rimMat) {
                 this.currentCarConfig.rimColor = parseInt(rimHex.replace('#', ''), 16);
                 this.playerCarMesh.userData.rimMat.color.set(rimHex);
+                if (showroomMesh && showroomMesh.userData.rimMat) {
+                    showroomMesh.userData.rimMat.color.set(rimHex);
+                }
             }
             this.customCarColors[this.currentCarConfig.id] = {
                 color: this.currentCarConfig.color,
@@ -2317,7 +2376,16 @@ class HorizonGameEngine {
         }
         this.updateHUD();
 
-        this.renderer.render(this.scene, this.camera);
+        if (this.menuState === 'CAR_SELECTION' && this.garageCanvas) {
+            this.world.renderGarageShowroomToCanvas(
+                this.garageCanvas,
+                this.turntableAngle,
+                this.turntableZoom,
+                this.turntablePitch
+            );
+        } else {
+            this.renderer.render(this.scene, this.camera);
+        }
         requestAnimationFrame((t) => this.gameLoop(t));
     }
 }

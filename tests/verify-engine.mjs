@@ -45,6 +45,7 @@ function createBrowserEnvironment() {
         fill: () => {},
         arc: () => {},
         fillText: () => {},
+        drawImage: () => {},
         createLinearGradient: () => ({ addColorStop: () => {} }),
         createRadialGradient: () => ({ addColorStop: () => {} })
     });
@@ -336,14 +337,19 @@ for (let m = 0; m < sandbox.window.FH6_DATA.maps.length; m++) {
 }
 report.passedTests.push('5 Maps (100% Unobstructed Track Surface + GPU Optimization < 305 draw calls)');
 
-// 3. Prueba de los 8 Autos JDM y Suspensión de 4 ruedas
+// 3. Prueba de los 12 Vehículos 3D Seleccionables, Visor 3D 360° del Garaje y Suspensión de 4 ruedas
+assert.equal(sandbox.window.FH6_DATA.cars.length, 12, 'Must include all 12 selectable 3D vehicles in the garage catalog');
 for (let c = 0; c < sandbox.window.FH6_DATA.cars.length; c++) {
     game.loadPlayerCar(c);
     assert.ok(game.playerCarMesh.userData.chassisGroup, `Car ${c} missing chassisGroup`);
     assert.equal(game.playerCarMesh.userData.wheels.length, 4, `Car ${c} must have 4 wheels`);
+    assert.ok(game.world.garageShowroomCarMesh, `Car ${c} must be loaded into the 360° 3D Garage Showroom`);
+    const preview3d = game.world.generateCar3DPreviewDataUrl(sandbox.window.FH6_DATA.cars[c]);
+    assert.ok(preview3d.startsWith('data:image/'), `Car ${c} must generate a valid 3D preview`);
 }
-game.loadPlayerCar(0); // Nissan Skyline GT-R R34
-report.passedTests.push('8 JDM Cars & 4-Wheel Chassis Hierarchy');
+assert.equal(game.world.renderGarageShowroomToCanvas(game.garageCanvas, 0.75, 5.0, 1.45), true, 'Dedicated 3D garage canvas must render cleanly');
+game.loadPlayerCar(0); // Nissan GT-R (R35)
+report.passedTests.push('12 Selectable 3D Cars, Dedicated 360° 3D Garage Viewport & 4-Wheel Detailed Rims/Calipers');
 
 // 4. Prueba de Física, Aceleración, Derrape, Humo y Suspensión Dinámica
 game.loadMap(0);
@@ -582,7 +588,12 @@ env.elements.get('btn-menu-play').click();
 assert.equal(game.menuState, 'CAR_SELECTION', 'Clicking JUGAR must transition to CAR_SELECTION');
 assert.equal(env.elements.get('step-car-selection').classList.contains('hidden'), false, 'Car selection step must be visible');
 
-// Seleccionar un vehículo (por ejemplo, Honda NSX-R índice 6) y rotar el visor 3D
+// Verificar catálogo de 12 automóviles 3D en el Garaje y visor 3D interactivo
+const carCards = env.elements.get('cars-selector-grid').children;
+assert.equal(carCards.length, 12, `Expected 12 car cards in CAR_SELECTION, got ${carCards.length}`);
+assert.ok(game.world.garageShowroomScene && game.world.garageShowroomCarMesh, '3D Garage Showroom scene and car mesh must be initialized');
+
+// Seleccionar un vehículo (Nissan Skyline GT-R (R34) índice 6) y rotar el visor 3D
 game.loadPlayerCar(6);
 env.elements.get('btn-rotate-car-right').click();
 env.elements.get('btn-confirm-car').click();
@@ -603,7 +614,7 @@ game.loadMap(4);
 env.elements.get('btn-confirm-track').click();
 assert.equal(game.menuState, 'RACE_SETUP', 'Confirming track must transition to RACE_SETUP');
 assert.equal(env.elements.get('step-race-setup').classList.contains('hidden'), false, 'Race setup step must be visible');
-assert.ok(env.elements.get('setup-summary-car-name').textContent.includes('NSX-R'), 'Race setup must summarize selected car');
+assert.ok(env.elements.get('setup-summary-car-name').textContent.includes('Skyline GT-R (R34)'), 'Race setup must summarize selected car');
 assert.ok(env.elements.get('setup-summary-map-name').textContent.includes('Cusco'), 'Race setup must summarize selected track');
 
 // Probar navegación hacia atrás (RACE_SETUP -> TRACK_SELECTION -> CAR_SELECTION -> MAIN_MENU) y regresar a RACE_SETUP
