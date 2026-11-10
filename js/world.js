@@ -45,7 +45,33 @@ class HorizonWorldBuilder {
 
         this.textures = {};
         this.envMap = null;
+        this.previewCache = new Map();
         this.initProceduralTextures();
+        this.initShowroomLights();
+    }
+
+    initShowroomLights() {
+        this.showroomGroup = new THREE.Group();
+        this.showroomLightCyan = new THREE.PointLight(0x00e5ff, 2.2, 22);
+        this.showroomLightViolet = new THREE.PointLight(0xa855f7, 1.9, 22);
+        this.showroomLightRed = new THREE.PointLight(0xf43f5e, 1.8, 20);
+        this.showroomGroup.add(this.showroomLightCyan, this.showroomLightViolet, this.showroomLightRed);
+        this.scene.add(this.showroomGroup);
+    }
+
+    updateShowroomLights(carPos, timeSec = 0, active = true) {
+        if (!this.showroomGroup) return;
+        this.showroomGroup.visible = Boolean(active);
+        if (!active || !carPos) return;
+
+        const a1 = timeSec * 0.7;
+        const a2 = a1 + (Math.PI * 2) / 3;
+        const a3 = a1 + (Math.PI * 4) / 3;
+        const r = 5.4;
+
+        this.showroomLightCyan.position.set(carPos.x + Math.cos(a1) * r, carPos.y + 2.6, carPos.z + Math.sin(a1) * r);
+        this.showroomLightViolet.position.set(carPos.x + Math.cos(a2) * r, carPos.y + 3.1, carPos.z + Math.sin(a2) * r);
+        this.showroomLightRed.position.set(carPos.x + Math.cos(a3) * r, carPos.y + 2.2, carPos.z + Math.sin(a3) * r);
     }
 
     configureTextureQuality(texture, repeatX = 1, repeatY = 1) {
@@ -2484,6 +2510,142 @@ class HorizonWorldBuilder {
             progressT: (chosen.idxA + chosen.t) / numPts,
             index: bestIdx
         };
+    }
+
+    /**
+     * Genera una vista previa panorámica real de cada circuito a partir de sus datos,
+     * colores atmosféricos, hitos 3D y coordenadas reales del spline.
+     */
+    generateCircuitPreviewDataUrl(mapConfig) {
+        if (!mapConfig) return '';
+        if (this.previewCache && this.previewCache.has(mapConfig.id)) {
+            return this.previewCache.get(mapConfig.id);
+        }
+
+        const toHex = (num) => '#' + (num || 0).toString(16).padStart(6, '0');
+        const skyTop = toHex(mapConfig.skyColorTop);
+        const skyMid = toHex(mapConfig.skyColorMid);
+        const skyHor = toHex(mapConfig.skyColorHorizon);
+        const groundCol = toHex(mapConfig.groundColor);
+        const shoulderCol = toHex(mapConfig.shoulderColor);
+
+        // Muestrear el spline real del circuito (96 puntos)
+        const sampleCount = 96;
+        const rawPts = [];
+        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (let i = 0; i < sampleCount; i++) {
+            const p = this.evaluateTrackSpline(i / sampleCount, mapConfig);
+            rawPts.push(p);
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.z < minZ) minZ = p.z;
+            if (p.z > maxZ) maxZ = p.z;
+        }
+
+        const w = 440;
+        const h = 210;
+        const padX = 120;
+        const padY = 32;
+        const spanX = Math.max(1, maxX - minX);
+        const spanZ = Math.max(1, maxZ - minZ);
+        const scale = Math.min((w - padX * 2) / spanX, (h - padY * 2) / spanZ);
+        const cx = w * 0.62;
+        const cy = h * 0.56;
+        const midX = (minX + maxX) * 0.5;
+        const midZ = (minZ + maxZ) * 0.5;
+
+        const mappedPts = rawPts.map(p => ({
+            x: +(cx + (p.x - midX) * scale).toFixed(1),
+            y: +(cy + (p.z - midZ) * scale).toFixed(1)
+        }));
+
+        let dataUrl = '';
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                const skyGrad = ctx.createLinearGradient(0, 0, 0, h * 0.65);
+                skyGrad.addColorStop(0, skyTop);
+                skyGrad.addColorStop(0.55, skyMid);
+                skyGrad.addColorStop(1, skyHor);
+                ctx.fillStyle = skyGrad;
+                ctx.fillRect(0, 0, w, h);
+
+                ctx.fillStyle = groundCol;
+                ctx.fillRect(0, h * 0.56, w, h * 0.44);
+
+                // Siluetas de hitos emblemáticos del escenario a la izquierda
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+                ctx.beginPath();
+                ctx.moveTo(0, h * 0.58);
+                ctx.lineTo(65, h * 0.25);
+                ctx.lineTo(135, h * 0.58);
+                ctx.fill();
+
+                if (mapConfig.hasTokyoTower || mapConfig.hasSkyscrapers) {
+                    ctx.fillStyle = 'rgba(10, 15, 30, 0.85)';
+                    [16, 42, 72, 102, 134].forEach((bx, bi) => {
+                        const bh = 42 + (bi % 3) * 22;
+                        ctx.fillRect(bx, h * 0.58 - bh, 20, bh);
+                    });
+                    ctx.fillStyle = shoulderCol;
+                    ctx.fillRect(88, h * 0.58 - 76, 5, 76);
+                }
+
+                // Trazado real del circuito con escapatoria de arena y línea de meta
+                ctx.beginPath();
+                mappedPts.forEach((pt, idx) => {
+                    if (idx === 0) ctx.moveTo(pt.x, pt.y);
+                    else ctx.lineTo(pt.x, pt.y);
+                });
+                ctx.closePath();
+                ctx.strokeStyle = 'rgba(214, 180, 122, 0.55)';
+                ctx.lineWidth = 14;
+                ctx.stroke();
+
+                ctx.strokeStyle = '#1e293b';
+                ctx.lineWidth = 9;
+                ctx.stroke();
+
+                ctx.strokeStyle = shoulderCol;
+                ctx.lineWidth = 2.6;
+                ctx.stroke();
+
+                if (typeof canvas.toDataURL === 'function') {
+                    const candidate = canvas.toDataURL('image/png');
+                    if (candidate && candidate.startsWith('data:image/') && candidate.length > 64) {
+                        dataUrl = candidate;
+                    }
+                }
+            }
+        } catch (e) {}
+
+        // Respaldo SVG vectorial de alta definición con el spline real si toDataURL no está disponible
+        if (!dataUrl) {
+            const polyPoints = mappedPts.map(p => `${p.x},${p.y}`).join(' ');
+            const startPt = mappedPts[0] || { x: cx, y: cy };
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">` +
+                `<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">` +
+                `<stop offset="0%" stop-color="${skyTop}"/><stop offset="55%" stop-color="${skyMid}"/><stop offset="100%" stop-color="${skyHor}"/>` +
+                `</linearGradient></defs>` +
+                `<rect width="${w}" height="${h}" fill="url(#sky)"/>` +
+                `<rect y="${Math.round(h * 0.56)}" width="${w}" height="${Math.round(h * 0.44)}" fill="${groundCol}" opacity="0.88"/>` +
+                `<polygon points="0,120 75,38 155,120" fill="#0f172a" opacity="0.55"/>` +
+                `<polygon points="90,120 165,48 245,120" fill="#1e293b" opacity="0.45"/>` +
+                `<polygon points="${polyPoints}" fill="none" stroke="rgba(214,180,122,0.55)" stroke-width="14" stroke-linejoin="round"/>` +
+                `<polygon points="${polyPoints}" fill="none" stroke="#0f172a" stroke-width="9" stroke-linejoin="round"/>` +
+                `<polygon points="${polyPoints}" fill="none" stroke="${shoulderCol}" stroke-width="2.8" stroke-linejoin="round"/>` +
+                `<circle cx="${startPt.x}" cy="${startPt.y}" r="5.5" fill="#f43f5e" stroke="#ffffff" stroke-width="2"/>` +
+                `</svg>`;
+            dataUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+        }
+
+        if (this.previewCache) {
+            this.previewCache.set(mapConfig.id, dataUrl);
+        }
+        return dataUrl;
     }
 }
 
