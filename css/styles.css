@@ -992,3 +992,870 @@ html, body {
     #hud-speed { font-size: 34px; }
     #minimap-canvas { width: 110px; height: 88px; }
 }
+
+/* ==========================================================================
+   SISTEMA DE MENÚS CINEMATOGRÁFICO V2.0 (WELCOME -> MAIN_MENU -> GARAGE -> RACE)
+   ========================================================================== */
+.menu-screen-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 38;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 28px 42px;
+    background: radial-gradient(circle at 50% 62%, rgba(5, 8, 17, 0.12) 0%, rgba(4, 7, 18, 0.78) 88%);
+    transition: opacity 0.35s ease;
+}
+
+/* Partículas y Neones Sutiles de la Pantalla de Bienvenida */
+.welcome-neon-particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 0;
+}
+
+.neon-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(65px);
+    opacity: 0.38;
+    animation: floatOrb 8s ease-in-out infinite alternate;
+}
+
+.orb-cyan {
+    width: 340px;
+    height: 340px;
+    background: #00e5ff;
+    top: 10%;
+    left: 12%;
+}
+
+.orb-violet {
+    width: 380px;
+    height: 380px;
+    background: #a855f7;
+    bottom: 12%;
+    right: 14%;
+    animation-delay: -3s;
+}
+
+.orb-crimson {
+    width: 290px;
+    height: 290px;
+    background: #f43f5e;
+    top: 22%;
+    right: 22%;
+    animation-delay: -5s;
+}
+
+@keyframes floatOrb {
+    from { transform: translate(0, 0) scale(1); }
+    to { transform: translate(24px, -18px) scale(1.12); }
+}
+
+.neon-spark {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #00e5ff;
+    box-shadow: 0 0 12px #00e5ff, 0 0 24px #f43f5e;
+    animation: riseSpark 6s linear infinite;
+}
+.neon-spark.s1 { left: 18%; bottom: 10%; animation-duration: 5.5s; }
+.neon-spark.s2 { left: 34%; bottom: 15%; animation-duration: 7.2s; background: #f43f5e; }
+.neon-spark.s3 { left: 52%; bottom: 8%; animation-duration: 6.1s; }
+.neon-spark.s4 { left: 68%; bottom: 18%; animation-duration: 5.8s; background: #a855f7; }
+.neon-spark.s5 { left: 82%; bottom: 12%; animation-duration: 6.7s; }
+.neon-spark.s6 { left: 45%; bottom: 22%; animation-duration: 7.5s; background: #facc15; }
+
+@keyframes riseSpark {
+    0% { transform: translateY(0) scale(0.8); opacity: 0; }
+    25% { opacity: 0.9; }
+    80% { opacity: 0.7; }
+    100% { transform: translateY(-280px) scale(1.3); opacity: 0; }
+}
+
+.welcome-top-bar, .welcome-bottom-bar {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 12px;
+    color: #cbd5e1;
+}
+
+.aaa-edition-pill, .aaa-tech-pill {
+    background: rgba(15, 23, 42, 0.78);
+    border: 1px solid rgba(0, 229, 255, 0.38);
+    color: var(--fh-cyan);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1.4px;
+    backdrop-filter: blur(8px);
+}
+
+.aaa-tech-pill {
+    border-color: rgba(244, 63, 94, 0.45);
+    color: #fda4af;
+}
+
+.welcome-hero-center {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin: auto 0;
+    gap: 14px;
+}
+
+.logo-kicker {
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    color: var(--fh-cyan);
+    text-shadow: 0 0 16px rgba(0, 229, 255, 0.75);
+}
+
+.game-hero-logo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 0.94;
+    transform: skewX(-10deg);
+}
+
+.game-hero-logo .logo-main {
+    font-size: clamp(46px, 8vw, 96px);
+    font-weight: 900;
+    letter-spacing: 6px;
+    color: #ffffff;
+    text-shadow: 0 0 32px rgba(0, 229, 255, 0.65), 0 6px 0 #0f172a;
+}
+
+.game-hero-logo .logo-accent {
+    font-size: clamp(28px, 4.6vw, 54px);
+    font-weight: 900;
+    letter-spacing: 4px;
+    background: linear-gradient(90deg, var(--fh-cyan), #a855f7, var(--fh-pink));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-top: 4px;
+}
+
+.game-hero-logo .logo-version {
+    margin-top: 10px;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    background: linear-gradient(135deg, var(--fh-pink), #7e22ce);
+    color: #fff;
+    padding: 4px 16px;
+    border-radius: 6px;
+    box-shadow: 0 0 24px rgba(244, 63, 94, 0.6);
+}
+
+.welcome-tagline {
+    font-size: clamp(13px, 1.6vw, 16px);
+    color: #e2e8f0;
+    max-width: 680px;
+    background: rgba(9, 13, 24, 0.62);
+    padding: 8px 20px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(8px);
+}
+
+.btn-press-start {
+    position: relative;
+    margin-top: 18px;
+    padding: 18px 48px;
+    border-radius: 16px;
+    border: 2px solid var(--fh-cyan);
+    background: linear-gradient(135deg, rgba(244, 63, 94, 0.92), rgba(147, 51, 234, 0.92));
+    color: #ffffff;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 0 38px rgba(244, 63, 94, 0.65), 0 0 70px rgba(0, 229, 255, 0.35);
+    transform: skewX(-8deg);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    animation: startPulse 1.6s ease-in-out infinite alternate;
+}
+
+.btn-press-start:hover, .btn-press-start:focus-visible {
+    transform: skewX(-8deg) scale(1.06) translateY(-2px);
+    box-shadow: 0 0 55px rgba(0, 229, 255, 0.95), 0 0 90px rgba(244, 63, 94, 0.8);
+    outline: none;
+}
+
+@keyframes startPulse {
+    from { box-shadow: 0 0 28px rgba(244, 63, 94, 0.55), 0 0 50px rgba(0, 229, 255, 0.28); }
+    to { box-shadow: 0 0 48px rgba(0, 229, 255, 0.85), 0 0 85px rgba(244, 63, 94, 0.75); }
+}
+
+.start-btn-text {
+    font-size: clamp(22px, 3vw, 32px);
+    font-weight: 900;
+    letter-spacing: 3px;
+}
+
+.start-btn-sub {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    color: #bae6fd;
+}
+
+/* ==========================================================================
+   MENÚ PRINCIPAL (MAIN_MENU)
+   ========================================================================== */
+.main-menu-layout {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    max-width: 1560px;
+    margin: auto;
+    gap: 28px;
+    flex-wrap: wrap;
+}
+
+.main-menu-nav-panel {
+    width: 440px;
+    max-width: 100%;
+    background: rgba(9, 13, 25, 0.82);
+    backdrop-filter: blur(18px);
+    border: 1px solid rgba(0, 229, 255, 0.28);
+    border-left: 5px solid var(--fh-pink);
+    border-radius: 22px;
+    padding: 26px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75);
+}
+
+.menu-brand-header .menu-brand-kicker {
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: var(--fh-cyan);
+}
+
+.menu-brand-header h2 {
+    font-size: 32px;
+    font-weight: 900;
+    font-style: italic;
+    letter-spacing: 1px;
+    margin: 4px 0 18px;
+}
+
+.menu-brand-header h2 span {
+    color: var(--fh-pink);
+}
+
+.main-menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.menu-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 15px 18px;
+    border-radius: 14px;
+    background: rgba(30, 41, 59, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #f8fafc;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.menu-nav-btn:hover, .menu-nav-btn.active-focus {
+    transform: translateX(8px);
+    border-color: var(--fh-cyan);
+    background: linear-gradient(135deg, rgba(14, 116, 144, 0.48), rgba(159, 18, 57, 0.42));
+    box-shadow: 0 8px 25px rgba(0, 229, 255, 0.28);
+}
+
+.menu-nav-btn.primary-nav-btn {
+    border-left: 4px solid var(--fh-cyan);
+}
+
+.nav-btn-icon {
+    font-size: 24px;
+}
+
+.nav-btn-copy {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.nav-btn-copy strong {
+    font-size: 17px;
+    font-weight: 900;
+    letter-spacing: 1px;
+}
+
+.nav-btn-copy small {
+    font-size: 11px;
+    color: #cbd5e1;
+}
+
+.nav-btn-arrow {
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--fh-cyan);
+}
+
+.menu-navigation-hint {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 11px;
+    color: var(--fh-muted);
+}
+
+.main-menu-showcase-card {
+    width: 390px;
+    max-width: 100%;
+    background: rgba(9, 13, 25, 0.78);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-right: 4px solid var(--fh-cyan);
+    border-radius: 20px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.showcase-card-badge {
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 1.6px;
+    color: var(--fh-cyan);
+}
+
+.showcase-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.showcase-cat-text {
+    font-size: 12px;
+    color: var(--fh-amber);
+    font-weight: 700;
+}
+
+.showcase-circuit-box {
+    background: rgba(30, 41, 59, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.showcase-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--fh-muted);
+}
+
+.showcase-Quick-actions, .showcase-quick-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 4px;
+}
+
+/* ==========================================================================
+   MODAL MULTIPASO: GARAJE 3D, 5 CIRCUITOS, CARRERA, OPCIONES Y CRÉDITOS
+   ========================================================================== */
+#festival-modal {
+    background: rgba(4, 7, 17, 0.52);
+    backdrop-filter: blur(6px);
+}
+
+.header-left-group {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.btn-back-step {
+    background: rgba(30, 41, 59, 0.9);
+    color: #fff;
+    border: 1px solid rgba(0, 229, 255, 0.45);
+    border-radius: 10px;
+    padding: 9px 15px;
+    font-size: 12px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: 0.15s;
+}
+
+.btn-back-step:hover {
+    background: rgba(0, 229, 255, 0.25);
+    transform: translateX(-2px);
+}
+
+.wizard-steps-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.wizard-step-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(30, 41, 59, 0.78);
+    color: #94a3b8;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: 0.15s;
+}
+
+.wizard-step-pill span {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.14);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+}
+
+.wizard-step-pill.active {
+    background: linear-gradient(135deg, rgba(0, 229, 255, 0.28), rgba(244, 63, 94, 0.28));
+    color: #fff;
+    border-color: var(--fh-cyan);
+}
+
+.wizard-step-pill.active span {
+    background: var(--fh-cyan);
+    color: #050811;
+}
+
+/* Visor 3D de Automóvil en el Garaje */
+.garage-3d-showcase-bar {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 14px;
+    margin-top: 12px;
+}
+
+.turntable-drag-zone {
+    min-height: 235px;
+    border-radius: 16px;
+    border: 1px dashed rgba(0, 229, 255, 0.48);
+    background: radial-gradient(circle at 50% 60%, rgba(5, 8, 17, 0.05) 0%, rgba(9, 13, 25, 0.58) 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 12px 14px;
+    cursor: grab;
+}
+
+.turntable-drag-zone:active {
+    cursor: grabbing;
+}
+
+.turntable-overlay-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.turntable-controls {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.btn-icon.active {
+    background: rgba(0, 229, 255, 0.32);
+    border-color: var(--fh-cyan);
+    color: var(--fh-cyan);
+}
+
+.turntable-floor-hint {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #bae6fd;
+    background: rgba(9, 13, 24, 0.72);
+    padding: 6px 12px;
+    border-radius: 999px;
+    align-self: center;
+}
+
+.garage-live-specs-card {
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.specs-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.spec-year-badge {
+    font-size: 10px;
+    font-weight: 900;
+    color: var(--fh-cyan);
+    letter-spacing: 1px;
+}
+
+.specs-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+}
+
+.spec-kpi {
+    background: rgba(30, 41, 59, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 6px 8px;
+    text-align: center;
+}
+
+.spec-kpi span {
+    display: block;
+    font-size: 9px;
+    color: var(--fh-muted);
+    font-weight: 800;
+}
+
+.spec-kpi strong {
+    font-size: 12px;
+    color: #fff;
+}
+
+.garage-tuning-inline {
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Tarjetas de los 5 Circuitos con Imagen Previa Real */
+.maps-grid-five {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
+}
+
+.map-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+    padding: 0;
+}
+
+.map-card-preview-wrap {
+    position: relative;
+    width: 100%;
+    height: 118px;
+    background: #090d16;
+    overflow: hidden;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.map-card-preview-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.25s ease;
+}
+
+.map-card:hover .map-card-preview-img {
+    transform: scale(1.05);
+}
+
+.map-card-body {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+}
+
+.map-region-title {
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    color: var(--fh-cyan);
+}
+
+.btn-select-map {
+    margin-top: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 229, 255, 0.4);
+    background: rgba(15, 23, 42, 0.85);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: 0.15s;
+}
+
+.map-card.active .btn-select-map {
+    background: linear-gradient(135deg, var(--fh-pink), #e11d48);
+    border-color: transparent;
+}
+
+.step-footer-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Pantalla de Configuración de Carrera (RACE_SETUP) */
+.race-setup-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 16px;
+    margin-top: 12px;
+}
+
+.setup-params-card, .setup-summary-card {
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.setup-pills-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+    gap: 8px;
+}
+
+.setup-option-pill {
+    background: rgba(30, 41, 59, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+    padding: 8px 10px;
+    color: #e2e8f0;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    text-align: left;
+    transition: 0.15s;
+}
+
+.setup-option-pill.active {
+    border-color: var(--fh-cyan);
+    background: rgba(0, 229, 255, 0.22);
+    color: #fff;
+}
+
+.setup-competitors-box {
+    margin-top: 6px;
+    background: rgba(30, 41, 59, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.competitors-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+}
+
+.competitors-row span { color: var(--fh-muted); font-weight: 700; }
+.competitors-row strong { color: var(--fh-amber); }
+
+.summary-block {
+    background: rgba(30, 41, 59, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.summary-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 900;
+    color: var(--fh-cyan);
+}
+
+.btn-link-mini {
+    background: transparent;
+    border: 1px solid rgba(0, 229, 255, 0.4);
+    color: var(--fh-cyan);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.summary-map-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.summary-map-thumb {
+    width: 112px;
+    height: 64px;
+    border-radius: 8px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-launch-race {
+    margin-top: auto;
+    width: 100%;
+    padding: 16px;
+    font-size: 17px;
+    letter-spacing: 1px;
+}
+
+.volume-slider-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+}
+
+.volume-slider-row input[type="range"] {
+    flex: 1;
+    max-width: 220px;
+}
+
+/* Créditos y Pantalla de Carga */
+.credits-box {
+    text-align: center;
+    padding: 24px;
+    background: rgba(15, 23, 42, 0.85);
+    border-radius: 16px;
+    border: 1px solid rgba(0, 229, 255, 0.25);
+}
+
+.credits-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.credit-item {
+    background: rgba(30, 41, 59, 0.7);
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.credit-item span {
+    display: block;
+    font-size: 10px;
+    color: var(--fh-cyan);
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+
+.loading-card {
+    margin: auto;
+    width: 560px;
+    max-width: 94vw;
+    background: rgba(9, 13, 25, 0.94);
+    border: 2px solid var(--fh-cyan);
+    border-radius: 22px;
+    padding: 32px;
+    text-align: center;
+    box-shadow: 0 0 60px rgba(0, 229, 255, 0.35);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.loading-bar-outer {
+    width: 100%;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 8px 0;
+}
+
+.loading-bar-inner {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--fh-cyan), #a855f7, var(--fh-pink));
+    transition: width 0.18s ease;
+}
+
+.loading-status-text {
+    font-size: 12px;
+    color: #bae6fd;
+    font-weight: 700;
+}
+
+@media (max-width: 920px) {
+    .garage-3d-showcase-bar, .race-setup-grid {
+        grid-template-columns: 1fr;
+    }
+    .menu-screen-overlay {
+        padding: 16px;
+    }
+}
