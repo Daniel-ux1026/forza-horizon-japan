@@ -364,16 +364,23 @@ class HorizonAudioManager {
     }
 
     triggerHiHat(time) {
-        const osc = this.ctx.createOscillator();
+        if (!this.noiseBuffer) return;
+        const noiseSrc = this.ctx.createBufferSource();
+        noiseSrc.buffer = this.noiseBuffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'highpass';
+        filter.frequency.setValueAtTime(6800, time);
+
         const gain = this.ctx.createGain();
-        osc.type = 'highpass';
-        osc.frequency.setValueAtTime(6800, time);
-        gain.gain.setValueAtTime(0.04, time);
+        gain.gain.setValueAtTime(0.045, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.04);
-        osc.connect(gain);
+
+        noiseSrc.connect(filter);
+        filter.connect(gain);
         gain.connect(this.musicMasterGain);
-        osc.start(time);
-        osc.stop(time + 0.045);
+        noiseSrc.start(time);
+        noiseSrc.stop(time + 0.045);
     }
 
     triggerSynthNote(time, freq, type, duration, peakGain, cutoff) {

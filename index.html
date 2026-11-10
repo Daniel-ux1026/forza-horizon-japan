@@ -37,6 +37,7 @@
                     <span id="hud-lap-num">VUELTA 1 / 3</span>
                     <span id="hud-lap-time">00:00.0</span>
                     <span id="hud-cp-timer" class="hidden">⏱️ CHECKPOINT: 28.0s</span>
+                    <span id="hud-police-heat" class="hidden">🚨 ARRESTO: 0%</span>
                     <span>DRIFT: <strong id="hud-total-score" style="color:#00e5ff;">0</strong></span>
                 </div>
             </div>
@@ -76,9 +77,10 @@
                 </div>
 
                 <div class="hud-quick-buttons">
-                    <button type="button" id="btn-open-garage" class="btn-hud-action primary">🏎️ Garaje / Tuning / Modos (G)</button>
+                    <button type="button" id="btn-open-garage" class="btn-hud-action primary">🏎️ Garaje / Tuning (G)</button>
+                    <button type="button" id="btn-pause-race" class="btn-hud-action">⏸ Pausa (P)</button>
                     <button type="button" id="btn-camera-toggle" class="btn-hud-action">🎥 Cámara (C)</button>
-                    <button type="button" id="btn-reset-car" class="btn-hud-action">🏁 Reiniciar Salida (R)</button>
+                    <button type="button" id="btn-reset-car" class="btn-hud-action">🏁 Reiniciar (R)</button>
                     <button type="button" id="btn-toggle-touch" class="btn-hud-action">📱 Controles Táctiles</button>
                 </div>
             </div>
@@ -143,11 +145,24 @@
         </div>
     </div>
 
-    <!-- Modal de Fin de Carrera (3 Vueltas Completadas / Podio) -->
-    <div id="finish-race-modal" class="hidden">
+    <!-- Modal de Pausa en Carrera -->
+    <div id="pause-modal" class="hidden">
         <div class="finish-card">
-            <h2 id="finish-title" style="font-size:24px;font-weight:900;color:#fff;">🏆 ¡CARRERA FINALIZADA!</h2>
-            <p style="font-size:13px;color:#94a3b8;margin-top:4px;">Resultados Oficiales de las 3 Vueltas en Japón</p>
+            <h2 style="font-size:24px;font-weight:900;color:#00e5ff;">⏸ CARRERA EN PAUSA</h2>
+            <p style="font-size:13px;color:#94a3b8;margin:6px 0 18px;">El cronómetro y las físicas están detenidos.</p>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+                <button type="button" id="btn-resume-race" class="btn-drive-now">▶ Continuar Carrera (P / ESC)</button>
+                <button type="button" id="btn-pause-restart" class="btn-hud-action" style="padding:12px;font-size:13px;">🔄 Reiniciar desde Línea de Salida (R)</button>
+                <button type="button" id="btn-pause-garage" class="btn-hud-action" style="padding:12px;font-size:13px;">🏎️ Abrir Garaje / Cambiar Auto o Mapa (G)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Fin de Carrera (3 Vueltas Completadas / Podio / Derrota) -->
+    <div id="finish-race-modal" class="hidden">
+        <div class="finish-card" style="width:620px;">
+            <h2 id="finish-title" style="font-size:22px;font-weight:900;color:#fff;">🏆 ¡CARRERA FINALIZADA!</h2>
+            <p style="font-size:12px;color:#94a3b8;margin-top:4px;">Clasificación Oficial del Festival Horizon Japón (3 Vueltas)</p>
             <div class="finish-stats-grid">
                 <div class="finish-stat-box">
                     <span>POSICIÓN FINAL</span>
@@ -166,7 +181,20 @@
                     <strong id="finish-drift-score">12,400 PTS</strong>
                 </div>
             </div>
-            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+            <!-- Tabla Clasificatoria de los 7 Competidores -->
+            <div class="standings-table-wrap">
+                <table class="standings-table">
+                    <thead>
+                        <tr>
+                            <th>POS</th>
+                            <th>COMPETIDOR / VEHÍCULO JDM</th>
+                            <th>ESTADO / TIEMPO</th>
+                        </tr>
+                    </thead>
+                    <tbody id="finish-standings-body"></tbody>
+                </table>
+            </div>
+            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:14px;">
                 <button type="button" id="btn-finish-restart" class="btn-drive-now">🔄 Repetir Carrera en Línea de Salida</button>
                 <button type="button" id="btn-finish-garage" class="btn-hud-action" style="padding:12px 18px;font-size:13px;">🏎️ Ir al Garaje / Cambiar Auto</button>
             </div>
@@ -211,7 +239,6 @@
             <!-- 3. Taller de Pintura/Tuning + Radio Horizon Japón + Ajustes WebGL -->
             <div class="section-heading">🎨 3. Taller de Pintura Personalizada, Radio Musical y Gráficos</div>
             <div class="music-settings-grid">
-                <!-- Tarjeta de Pintura y Colores en Tiempo Real -->
                 <div class="settings-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <strong style="font-size:13px;">🎨 Personalización Visual del Vehículo</strong>
@@ -245,12 +272,12 @@
                         <span><b class="key-chip">A D / ← →</b> Girar</span>
                         <span><b class="key-chip">ESPACIO</b> Drift</span>
                         <span><b class="key-chip">SHIFT</b> Nitro</span>
+                        <span><b class="key-chip">P / ESC</b> Pausa</span>
                         <span><b class="key-chip">C</b> Cámara</span>
-                        <span><b class="key-chip">R</b> Reiniciar Salida</span>
+                        <span><b class="key-chip">R</b> Reiniciar</span>
                     </div>
                 </div>
 
-                <!-- Tarjeta de Radio y Subida de MP3 -->
                 <div class="settings-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <strong style="font-size:13px;">📻 Emisora Horizon Japón + Tus MP3</strong>
@@ -275,8 +302,13 @@
         </div>
     </div>
 
-    <!-- Motor 3D Three.js WebGL y Módulos del Juego -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- three.js r128 local (funciona sin internet); respaldo a CDN si el archivo local faltara -->
+    <script src="vendor/three.min.js"></script>
+    <script>
+        if (!window.THREE) {
+            document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+        }
+    </script>
     <script src="js/data.js"></script>
     <script src="js/audio.js"></script>
     <script src="js/world.js"></script>

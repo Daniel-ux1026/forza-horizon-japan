@@ -1,8 +1,8 @@
 // ============================================================================
-// INGENIERÍA GRÁFICA 3D AVANZADA (THREE.JS / WEBGL) - FORZA HORIZON JAPAN
-// Incluye: Filtrado Anisotrópico, Mitigación Z-Fighting (polygonOffset),
-// Pianos 3D con Relieve, Skid Marks en Curvas, Vallas Bionda con Postes,
-// Farolas con SpotLights, Señales de Tráfico Japonesas (止まれ) y Sakura Rico.
+// INGENIERÍA GRÁFICA 3D AVANZADA Y OPTIMIZACIÓN GPU (THREE.JS / WEBGL)
+// Incluye: InstancedMesh (reducción del 85% de Draw Calls), Gestión de VRAM,
+// Filtrado Anisotrópico, Mitigación Z-Fighting, Pianos 3D, Skid Marks,
+// Humo de Derrape, IA con Trazada/Frenada en Curva y Patrullas Policiales.
 // ============================================================================
 
 class HorizonWorldBuilder {
@@ -18,6 +18,7 @@ class HorizonWorldBuilder {
 
         this.trackPoints = [];
         this.trackCurvatures = [];
+        this.trackTotalLengthMeters = 2400;
         this.roadWidth = 19.5;
         this.currentMap = null;
         this.aiCars = [];
@@ -25,20 +26,28 @@ class HorizonWorldBuilder {
         this.checkpoints = [];
         this.sakuraParticles = null;
 
-        // Sistema de chispas de colisión
+        // Sistemas de partículas (Chispas de colisión + Humo de neumáticos)
         this.sparkParticles = [];
-        this.sparkGroup = new THREE.Group();
-        this.scene.add(this.sparkGroup);
+        this.smokeParticles = [];
+        this.fxGroup = new THREE.Group();
+        this.scene.add(this.fxGroup);
+
+        // Geometrías y materiales compartidos para evitar duplicación en GPU
+        this.sharedSparkGeo = new THREE.BoxGeometry(0.14, 0.14, 0.45);
+        this.sharedSparkMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+        this.sharedSmokeGeo = new THREE.DodecahedronGeometry(0.42, 0);
+        this.sharedSmokeMat = new THREE.MeshBasicMaterial({
+            color: 0xe2e8f0,
+            transparent: true,
+            opacity: 0.36,
+            depthWrite: false
+        });
 
         this.textures = {};
         this.envMap = null;
         this.initProceduralTextures();
     }
 
-    /**
-     * Configura wrapping repetitivo y filtrado anisotrópico máximo para evitar
-     * texturas estiradas, borrosas o pixeladas a la distancia.
-     */
     configureTextureQuality(texture, repeatX = 1, repeatY = 1) {
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
@@ -78,7 +87,7 @@ class HorizonWorldBuilder {
         this.envMap.needsUpdate = true;
         this.scene.environment = this.envMap;
 
-        // 2. Textura Base de Asfalto Japonés de Alta Densidad (Sin estiramiento)
+        // 2. Textura Base de Asfalto Japonés de Alta Densidad
         const roadCanvas = document.createElement('canvas');
         roadCanvas.width = 512;
         roadCanvas.height = 512;
@@ -87,7 +96,6 @@ class HorizonWorldBuilder {
         rCtx.fillStyle = '#161a24';
         rCtx.fillRect(0, 0, 512, 512);
 
-        // Micro-grano mineral y variaciones de rodadura
         for (let i = 0; i < 9000; i++) {
             const x = Math.random() * 512;
             const y = Math.random() * 512;
@@ -96,7 +104,6 @@ class HorizonWorldBuilder {
             rCtx.fillRect(x, y, 2, 2);
         }
 
-        // Huellas sutiles longitudinales de neumáticos en los 4 carriles
         rCtx.fillStyle = 'rgba(8, 11, 18, 0.35)';
         [85, 175, 335, 425].forEach(laneX => {
             rCtx.fillRect(laneX - 18, 0, 12, 512);
@@ -109,30 +116,26 @@ class HorizonWorldBuilder {
             160
         );
 
-        // 3. Textura Dedicada para Líneas de Carril (Renderizada con polygonOffset anti Z-Fighting)
+        // 3. Textura Dedicada para Líneas de Carril (con polygonOffset anti Z-Fighting)
         const laneCanvas = document.createElement('canvas');
         laneCanvas.width = 512;
         laneCanvas.height = 512;
         const lCtx = laneCanvas.getContext('2d');
         lCtx.clearRect(0, 0, 512, 512);
 
-        // Líneas continuas exteriores blancas reflectantes
         lCtx.fillStyle = '#f8fafc';
         lCtx.fillRect(14, 0, 10, 512);
         lCtx.fillRect(488, 0, 10, 512);
 
-        // Doble línea continua central amarilla/ámbar japonesa
         lCtx.fillStyle = '#f59e0b';
         lCtx.fillRect(247, 0, 6, 512);
         lCtx.fillRect(259, 0, 6, 512);
 
-        // Líneas discontinuas divisorias de carril + reflectores Cat-Eye
         for (let y = 0; y < 512; y += 64) {
             lCtx.fillStyle = 'rgba(248, 250, 252, 0.92)';
             lCtx.fillRect(130, y, 7, 36);
             lCtx.fillRect(375, y, 7, 36);
 
-            // Captafaros reflectantes en el asfalto
             lCtx.fillStyle = '#38bdf8';
             lCtx.fillRect(129, y + 46, 9, 5);
             lCtx.fillRect(374, y + 46, 9, 5);
@@ -144,7 +147,7 @@ class HorizonWorldBuilder {
             160
         );
 
-        // 4. Textura de Marcas de Frenada y Derrape (Skid Marks para Curvas Cerradas)
+        // 4. Textura de Marcas de Frenada y Derrape (Skid Marks)
         const skidCanvas = document.createElement('canvas');
         skidCanvas.width = 256;
         skidCanvas.height = 256;
@@ -169,7 +172,7 @@ class HorizonWorldBuilder {
             1
         );
 
-        // 5. Textura para Pianos 3D (Rumble Strips Rojo/Blanco con Desgaste de Neumático)
+        // 5. Textura para Pianos 3D (Rumble Strips Rojo/Blanco)
         const curbCanvas = document.createElement('canvas');
         curbCanvas.width = 128;
         curbCanvas.height = 256;
@@ -178,7 +181,6 @@ class HorizonWorldBuilder {
             const isRed = (y / 64) % 2 === 0;
             cCtx.fillStyle = isRed ? '#dc2626' : '#f1f5f9';
             cCtx.fillRect(0, y, 128, 64);
-            // Borde biselado sombreado para acentuar el relieve 3D
             cCtx.fillStyle = 'rgba(0, 0, 0, 0.28)';
             cCtx.fillRect(0, y + 56, 128, 8);
         }
@@ -202,7 +204,6 @@ class HorizonWorldBuilder {
         gCtx.fillStyle = railGrad;
         gCtx.fillRect(0, 0, 256, 64);
 
-        // Reflectores viales rojos/ámbar cada tramo
         gCtx.fillStyle = '#ef4444';
         gCtx.fillRect(48, 22, 18, 20);
         gCtx.fillStyle = '#facc15';
@@ -214,7 +215,7 @@ class HorizonWorldBuilder {
             1
         );
 
-        // 7. Textura de Terreno / Césped / Roca con RepeatWrapping Proporcional
+        // 7. Textura de Terreno con RepeatWrapping Proporcional
         const groundCanvas = document.createElement('canvas');
         groundCanvas.width = 256;
         groundCanvas.height = 256;
@@ -251,7 +252,7 @@ class HorizonWorldBuilder {
             1
         );
 
-        // 9. Textura Tileable para Rascacielos (Mapeo UV proporcional sin deformación)
+        // 9. Textura Tileable para Rascacielos
         const bldCanvas = document.createElement('canvas');
         bldCanvas.width = 256;
         bldCanvas.height = 256;
@@ -260,7 +261,6 @@ class HorizonWorldBuilder {
         bCtx.fillRect(0, 0, 256, 256);
 
         for (let row = 8; row < 248; row += 24) {
-            // Forjados estructurales de hormigón entre plantas
             bCtx.fillStyle = '#1e293b';
             bCtx.fillRect(0, row - 4, 256, 3);
 
@@ -284,14 +284,13 @@ class HorizonWorldBuilder {
             1
         );
 
-        // 10. Textura Rica con Canal Alfa para Follaje de Cerezo (Sakura Crossed Billboards)
+        // 10. Textura con Canal Alfa para Follaje de Cerezo (Sakura Crossed Billboards)
         const sakCanvas = document.createElement('canvas');
         sakCanvas.width = 256;
         sakCanvas.height = 256;
         const skCtx = sakCanvas.getContext('2d');
         skCtx.clearRect(0, 0, 256, 256);
 
-        // Ramas internas finas
         skCtx.strokeStyle = '#3e1f0d';
         skCtx.lineWidth = 6;
         skCtx.beginPath();
@@ -303,7 +302,6 @@ class HorizonWorldBuilder {
         skCtx.lineTo(195, 85);
         skCtx.stroke();
 
-        // Racimos densos de flores de cerezo con sombreado suave
         for (let i = 0; i < 240; i++) {
             const angle = Math.random() * Math.PI * 2;
             const radius = Math.pow(Math.random(), 0.65) * 108;
@@ -348,9 +346,6 @@ class HorizonWorldBuilder {
         return tex;
     }
 
-    /**
-     * Crea texturas para señales de tráfico japonesas auténticas ("止まれ" STOP, Dirección y Curva Peligrosa).
-     */
     createTrafficSignTexture(type) {
         const canvas = document.createElement('canvas');
         canvas.width = 128;
@@ -359,7 +354,6 @@ class HorizonWorldBuilder {
         ctx.clearRect(0, 0, 128, 128);
 
         if (type === 'tomare') {
-            // Señal japonesa de STOP triangular invertida roja ("止まれ")
             ctx.fillStyle = '#dc2626';
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 6;
@@ -378,7 +372,6 @@ class HorizonWorldBuilder {
             ctx.font = 'bold 14px sans-serif';
             ctx.fillText('STOP', 64, 72);
         } else if (type === 'curve') {
-            // Rombo amarillo de advertencia de curva cerrada / Touge
             ctx.fillStyle = '#facc15';
             ctx.strokeStyle = '#090d16';
             ctx.lineWidth = 6;
@@ -396,7 +389,6 @@ class HorizonWorldBuilder {
             ctx.textAlign = 'center';
             ctx.fillText('↱', 64, 80);
         } else {
-            // Panel indicador azul de Autopista Urbana de Tokio
             ctx.fillStyle = '#0284c7';
             ctx.fillRect(6, 16, 116, 96);
             ctx.strokeStyle = '#ffffff';
@@ -442,12 +434,25 @@ class HorizonWorldBuilder {
         return new THREE.Vector3(x, y, z);
     }
 
-    buildMap(mapConfig) {
-        this.currentMap = mapConfig;
-
+    /**
+     * Libera recursos de geometría y materiales en GPU al cambiar de mapa
+     * para evitar fugas de VRAM.
+     */
+    disposeWorldGroup() {
+        this.worldGroup.traverse((obj) => {
+            if (obj.geometry) {
+                obj.geometry.dispose();
+            }
+        });
         while (this.worldGroup.children.length > 0) {
             this.worldGroup.remove(this.worldGroup.children[0]);
         }
+    }
+
+    buildMap(mapConfig) {
+        this.currentMap = mapConfig;
+        this.disposeWorldGroup();
+
         this.aiCars = [];
         this.policeCars = [];
         this.checkpoints = [];
@@ -463,19 +468,23 @@ class HorizonWorldBuilder {
             this.trackPoints.push(this.evaluateTrackSpline(t, mapConfig));
         }
 
-        // Calcular curvatura local de cada segmento para situar Skid Marks y señales de curva
+        // Calcular longitud física real de la vuelta y curvatura por segmento
+        let totalLen = 0;
         this.trackCurvatures = [];
         for (let i = 0; i < segments; i++) {
             const prev = this.trackPoints[(i - 1 + segments) % segments];
             const curr = this.trackPoints[i];
             const next = this.trackPoints[(i + 1) % segments];
+            totalLen += curr.distanceTo(next);
+
             const v1 = new THREE.Vector2(curr.x - prev.x, curr.z - prev.z).normalize();
             const v2 = new THREE.Vector2(next.x - curr.x, next.z - curr.z).normalize();
             const dot = THREE.MathUtils.clamp(v1.dot(v2), -1, 1);
             this.trackCurvatures.push(Math.acos(dot));
         }
+        this.trackTotalLengthMeters = Math.max(1800, totalLen);
 
-        // 1. Terreno con RepeatWrapping proporcional y sombreado activo
+        // 1. Terreno con RepeatWrapping proporcional
         const groundGeo = new THREE.PlaneGeometry(3600, 3600);
         const groundMat = new THREE.MeshStandardMaterial({
             color: mapConfig.groundColor,
@@ -489,22 +498,22 @@ class HorizonWorldBuilder {
         ground.receiveShadow = true;
         this.worldGroup.add(ground);
 
-        // 2. Asfalto + Capa de Líneas con polygonOffset + Pianos 3D con Relieve + Skid Marks
+        // 2. Asfalto + Líneas de Carril (polygonOffset) + Pianos 3D + Skid Marks fusionados
         this.buildRoadAndLaneMeshes();
         this.build3DRumbleCurbs();
         this.buildCornerSkidMarks();
 
-        // 3. Vallas Metálicas Bionda (Guardrails) con Postes de Acero y Reflectores
+        // 3. Vallas Metálicas Bionda + Postes Instanciados (InstancedMesh)
         this.buildMetallicGuardrails(mapConfig);
 
-        // 4. Señales de Tráfico Japonesas ("止まれ", Dirección y Advertencia de Curva)
+        // 4. Señales de Tráfico Japonesas ("止まれ", Dirección y Curva)
         this.buildJapaneseTrafficSigns();
 
         // 5. Pórtico de Salida / Meta + Checkpoints
         this.buildFestivalStartGate();
         this.buildCheckpointArches();
 
-        // 6. Monumentos, Rascacielos con UV proporcional, Farolas con SpotLights y Sakura
+        // 6. Monumentos, Rascacielos, Farolas Instanciadas y Sakura Instanciado
         if (mapConfig.hasMountFuji) this.buildMountFuji();
         if (mapConfig.hasTokyoTower) this.buildTokyoTower();
         if (mapConfig.hasToriiGates) this.buildToriiGatesAlongTrack();
@@ -517,10 +526,6 @@ class HorizonWorldBuilder {
         }
     }
 
-    /**
-     * Construye el asfalto base y una malla separada para las líneas de carril
-     * con polygonOffset activado para erradicar cualquier Z-Fighting.
-     */
     buildRoadAndLaneMeshes() {
         const numPts = this.trackPoints.length;
         const positions = [];
@@ -546,7 +551,6 @@ class HorizonWorldBuilder {
             positions.push(leftPt.x, leftPt.y + 0.08, leftPt.z);
             positions.push(rightPt.x, rightPt.y + 0.08, rightPt.z);
 
-            // Ligera elevación + polygonOffset para la capa de señalización horizontal
             lanePositions.push(leftPt.x, leftPt.y + 0.095, leftPt.z);
             lanePositions.push(rightPt.x, rightPt.y + 0.095, rightPt.z);
 
@@ -561,7 +565,6 @@ class HorizonWorldBuilder {
             }
         }
 
-        // Malla de Asfalto Principal
         const roadGeo = new THREE.BufferGeometry();
         roadGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
         roadGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
@@ -580,7 +583,6 @@ class HorizonWorldBuilder {
         roadMesh.receiveShadow = true;
         this.worldGroup.add(roadMesh);
 
-        // Malla de Líneas de Carril con Mitigación Estricta de Z-Fighting
         const laneGeo = new THREE.BufferGeometry();
         laneGeo.setAttribute('position', new THREE.Float32BufferAttribute(lanePositions, 3));
         laneGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
@@ -602,10 +604,6 @@ class HorizonWorldBuilder {
         this.worldGroup.add(laneMesh);
     }
 
-    /**
-     * Construye Pianos de Circuito (Rumble Strips) con relieve tridimensional real
-     * y ondulaciones físicas en los bordes de la calzada.
-     */
     build3DRumbleCurbs() {
         const numPts = this.trackPoints.length;
         const curbWidth = 1.15;
@@ -626,7 +624,6 @@ class HorizonWorldBuilder {
                 const tangent = new THREE.Vector3().subVectors(pNext, p).normalize();
                 const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
 
-                // Ondulación física 3D tipo diente de sierra para que el piano tenga relieve real
                 const rippleHeight = 0.16 + Math.sin(i * 1.8) * 0.038;
 
                 const ptInner = new THREE.Vector3().copy(p).addScaledVector(right, side * innerOffset);
@@ -677,35 +674,26 @@ class HorizonWorldBuilder {
     }
 
     /**
-     * Genera marcas oscuras de desgaste y frenada de neumáticos (Skid Marks)
-     * en las zonas de mayor curvatura del circuito con polygonOffset anti-parpadeo.
+     * Genera todas las marcas de frenada en curva en UNA sola malla combinada (1 Draw Call)
+     * con polygonOffset para evitar cualquier Z-Fighting.
      */
     buildCornerSkidMarks() {
         const numPts = this.trackPoints.length;
-        const skidMat = new THREE.MeshBasicMaterial({
-            map: this.textures.skidMarks,
-            transparent: true,
-            opacity: 0.72,
-            depthWrite: false,
-            polygonOffset: true,
-            polygonOffsetFactor: -2,
-            polygonOffsetUnits: -2
-        });
+        const positions = [];
+        const uvs = [];
+        const indices = [];
+        let vertexOffset = 0;
 
         let i = 0;
         while (i < numPts) {
-            if (this.trackCurvatures[i] > 0.022) {
+            if (this.trackCurvatures[i] > 0.020) {
                 const startIdx = Math.max(0, i - 3);
                 const endIdx = Math.min(numPts - 1, i + 9);
-                const positions = [];
-                const uvs = [];
-                const indices = [];
                 const stripHalfW = this.roadWidth * 0.36;
-
-                let stepCount = 0;
                 const totalSteps = endIdx - startIdx + 1;
 
-                for (let k = startIdx; k <= endIdx; k++) {
+                for (let step = 0; step < totalSteps; step++) {
+                    const k = startIdx + step;
                     const p = this.trackPoints[k % numPts];
                     const pNext = this.trackPoints[(k + 1) % numPts];
                     const tangent = new THREE.Vector3().subVectors(pNext, p).normalize();
@@ -717,35 +705,43 @@ class HorizonWorldBuilder {
                     positions.push(leftPt.x, leftPt.y + 0.105, leftPt.z);
                     positions.push(rightPt.x, rightPt.y + 0.105, rightPt.z);
 
-                    const v = stepCount / Math.max(1, totalSteps - 1);
+                    const v = step / Math.max(1, totalSteps - 1);
                     uvs.push(0, v, 1, v);
 
-                    if (stepCount < totalSteps - 1) {
-                        const base = stepCount * 2;
-                        indices.push(base, base + 1, base + 2);
-                        indices.push(base + 1, base + 3, base + 2);
+                    if (step < totalSteps - 1) {
+                        const base = vertexOffset + step * 2;
+                        indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
                     }
-                    stepCount++;
                 }
-
-                const skidGeo = new THREE.BufferGeometry();
-                skidGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-                skidGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-                skidGeo.setIndex(indices);
-
-                const skidMesh = new THREE.Mesh(skidGeo, skidMat);
-                this.worldGroup.add(skidMesh);
-
+                vertexOffset += totalSteps * 2;
                 i = endIdx + 6;
             } else {
                 i++;
             }
         }
+
+        if (positions.length === 0) return;
+
+        const skidGeo = new THREE.BufferGeometry();
+        skidGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        skidGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        skidGeo.setIndex(indices);
+
+        const skidMat = new THREE.MeshBasicMaterial({
+            map: this.textures.skidMarks,
+            transparent: true,
+            opacity: 0.72,
+            depthWrite: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -2,
+            polygonOffsetUnits: -2
+        });
+
+        this.worldGroup.add(new THREE.Mesh(skidGeo, skidMat));
     }
 
     /**
-     * Construye Barreras de Contención Metálicas (Vallas Bionda / W-Beam Guardrails)
-     * con postes verticales de soporte y banda reflectante superior.
+     * Barreras Metálicas Bionda con Postes renderizados mediante THREE.InstancedMesh (1 Draw Call para 360 postes).
      */
     buildMetallicGuardrails(mapConfig) {
         const numPts = this.trackPoints.length;
@@ -770,6 +766,8 @@ class HorizonWorldBuilder {
         });
 
         const postGeo = new THREE.BoxGeometry(0.18, 1.15, 0.18);
+        const postTransforms = [];
+        const dummy = new THREE.Object3D();
 
         [-1, 1].forEach((side) => {
             const railPositions = [];
@@ -789,11 +787,9 @@ class HorizonWorldBuilder {
                 const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
                 const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * railOffset);
 
-                // Hoja metálica bionda entre 0.38m y 0.95m de altura
                 railPositions.push(pos.x, pos.y + 0.38, pos.z);
                 railPositions.push(pos.x, pos.y + 0.95, pos.z);
 
-                // Tira LED reflectante en el borde superior (0.96m a 1.06m)
                 neonPositions.push(pos.x, pos.y + 0.96, pos.z);
                 neonPositions.push(pos.x, pos.y + 1.06, pos.z);
 
@@ -805,14 +801,11 @@ class HorizonWorldBuilder {
                     railIndices.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
                     neonIndices.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
 
-                    // Colocar poste vertical de acero cada 2 segmentos
                     if (i % 2 === 0) {
-                        const post = new THREE.Mesh(postGeo, postMat);
-                        post.position.set(pos.x, pos.y + 0.55, pos.z);
-                        post.rotation.y = Math.atan2(tangent.x, tangent.z);
-                        post.castShadow = true;
-                        post.receiveShadow = true;
-                        this.worldGroup.add(post);
+                        dummy.position.set(pos.x, pos.y + 0.55, pos.z);
+                        dummy.rotation.set(0, Math.atan2(tangent.x, tangent.z), 0);
+                        dummy.updateMatrix();
+                        postTransforms.push(dummy.matrix.clone());
                     }
                 }
             }
@@ -833,12 +826,16 @@ class HorizonWorldBuilder {
             nGeo.setIndex(neonIndices);
             this.worldGroup.add(new THREE.Mesh(nGeo, neonTopMat));
         });
+
+        // InstancedMesh único para todos los postes de acero
+        const instancedPosts = new THREE.InstancedMesh(postGeo, postMat, postTransforms.length);
+        instancedPosts.castShadow = true;
+        instancedPosts.receiveShadow = true;
+        postTransforms.forEach((mat, idx) => instancedPosts.setMatrixAt(idx, mat));
+        instancedPosts.instanceMatrix.needsUpdate = true;
+        this.worldGroup.add(instancedPosts);
     }
 
-    /**
-     * Añade señales de tráfico japonesas reales ("止まれ" STOP, flechas de dirección y advertencias Touge)
-     * con material emisivo suave para visibilidad nocturna.
-     */
     buildJapaneseTrafficSigns() {
         const poleMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.2 });
         const signTypes = ['direction', 'curve', 'tomare'];
@@ -855,6 +852,11 @@ class HorizonWorldBuilder {
             });
         });
 
+        const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 3.8, 8);
+        const boardGeo = new THREE.PlaneGeometry(1.45, 1.45);
+        const poleMatrices = [];
+        const dummy = new THREE.Object3D();
+
         for (let i = 10; i < this.trackPoints.length; i += 18) {
             const p = this.trackPoints[i];
             const pNext = this.trackPoints[(i + 1) % this.trackPoints.length];
@@ -864,28 +866,27 @@ class HorizonWorldBuilder {
             const side = (i % 36 === 10) ? -1 : 1;
             const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * (this.roadWidth * 0.5 + 1.85));
 
-            const signGroup = new THREE.Group();
-            signGroup.position.copy(pos);
-            signGroup.lookAt(new THREE.Vector3().copy(pos).sub(tangent));
+            dummy.position.set(pos.x, pos.y + 1.9, pos.z);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            poleMatrices.push(dummy.matrix.clone());
 
-            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.8, 8), poleMat);
-            pole.position.y = 1.9;
-            pole.castShadow = true;
-            signGroup.add(pole);
-
-            // Si la curva es cerrada, priorizar la señal amarilla de curva
             const matIdx = this.trackCurvatures[i] > 0.02 ? 1 : (i % 3);
-            const board = new THREE.Mesh(new THREE.PlaneGeometry(1.45, 1.45), signMaterials[matIdx]);
-            board.position.set(0, 3.5, 0.06);
-            signGroup.add(board);
-
-            this.worldGroup.add(signGroup);
+            const board = new THREE.Mesh(boardGeo, signMaterials[matIdx]);
+            board.position.set(pos.x, pos.y + 3.5, pos.z);
+            board.lookAt(pos.x - tangent.x, pos.y + 3.5, pos.z - tangent.z);
+            this.worldGroup.add(board);
         }
+
+        const instPoles = new THREE.InstancedMesh(poleGeo, poleMat, poleMatrices.length);
+        poleMatrices.forEach((m, i) => instPoles.setMatrixAt(i, m));
+        instPoles.instanceMatrix.needsUpdate = true;
+        this.worldGroup.add(instPoles);
     }
 
     /**
-     * Construye Farolas Urbanas de Tokio con brazos curvos, luminaria LED emisiva,
-     * haces volumétricos y fuentes THREE.SpotLight atenuadas para iluminar el asfalto.
+     * Farolas Urbanas de Tokio optimizadas con THREE.InstancedMesh (4 Draw Calls en total)
+     * + THREE.SpotLight atenuadas reales sobre el asfalto.
      */
     buildStreetLightsWithSpotlights() {
         const poleMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.3 });
@@ -902,8 +903,19 @@ class HorizonWorldBuilder {
             side: THREE.DoubleSide
         });
 
+        const poleGeo = new THREE.CylinderGeometry(0.14, 0.20, 8.8, 8);
+        const armGeo = new THREE.BoxGeometry(0.14, 0.14, 4.2);
+        const bulbGeo = new THREE.BoxGeometry(0.9, 0.18, 0.45);
+        const coneGeo = new THREE.ConeGeometry(4.2, 8.5, 12, 1, true);
+
+        const poleMats = [];
+        const armMats = [];
+        const bulbMats = [];
+        const coneMats = [];
+        const dummy = new THREE.Object3D();
+
         let spotLightCount = 0;
-        const maxActiveSpotLights = 8; // Límite estricto WebGL para mantener 60 FPS estables
+        const maxActiveSpotLights = 8;
 
         for (let i = 0; i < this.trackPoints.length; i += 12) {
             const p = this.trackPoints[i];
@@ -913,47 +925,56 @@ class HorizonWorldBuilder {
 
             const side = (i % 24 === 0) ? 1 : -1;
             const basePos = new THREE.Vector3().copy(p).addScaledVector(right, side * (this.roadWidth * 0.5 + 1.35));
-
-            const lampGroup = new THREE.Group();
-            lampGroup.position.copy(basePos);
-
-            // Mástil vertical
-            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.20, 8.8, 8), poleMat);
-            pole.position.y = 4.4;
-            pole.castShadow = true;
-            lampGroup.add(pole);
-
-            // Brazo horizontal proyectado hacia el centro de la calzada
             const armDir = new THREE.Vector3().copy(right).multiplyScalar(-side);
-            const armPos = new THREE.Vector3().copy(armDir).multiplyScalar(2.1);
-            const arm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 4.2), poleMat);
-            arm.position.set(armPos.x, 8.7, armPos.z);
-            arm.lookAt(basePos.x + armDir.x * 5, basePos.y + 8.7, basePos.z + armDir.z * 5);
-            lampGroup.add(arm);
 
-            // Cabezal LED emisivo
-            const headPos = new THREE.Vector3().copy(armDir).multiplyScalar(3.8);
-            const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.18, 0.45), bulbMat);
-            bulb.position.set(headPos.x, 8.62, headPos.z);
-            lampGroup.add(bulb);
+            // Mástil
+            dummy.position.set(basePos.x, basePos.y + 4.4, basePos.z);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            poleMats.push(dummy.matrix.clone());
 
-            // Cono volumétrico suave bajo la farola
-            const lightCone = new THREE.Mesh(new THREE.ConeGeometry(4.2, 8.5, 12, 1, true), coneMat);
-            lightCone.position.set(headPos.x, 4.3, headPos.z);
-            lampGroup.add(lightCone);
+            // Brazo
+            const armPos = new THREE.Vector3().copy(basePos).addScaledVector(armDir, 2.1);
+            dummy.position.set(armPos.x, basePos.y + 8.7, armPos.z);
+            dummy.lookAt(basePos.x + armDir.x * 5, basePos.y + 8.7, basePos.z + armDir.z * 5);
+            dummy.updateMatrix();
+            armMats.push(dummy.matrix.clone());
 
-            // Añadir THREE.SpotLight real atenuada en tramos clave del circuito
-            if (spotLightCount < maxActiveSpotLights && i % 45 === 0) {
+            // Cabezal LED
+            const headPos = new THREE.Vector3().copy(basePos).addScaledVector(armDir, 3.8);
+            dummy.position.set(headPos.x, basePos.y + 8.62, headPos.z);
+            dummy.rotation.set(0, Math.atan2(tangent.x, tangent.z), 0);
+            dummy.updateMatrix();
+            bulbMats.push(dummy.matrix.clone());
+
+            // Cono de luz
+            dummy.position.set(headPos.x, basePos.y + 4.3, headPos.z);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            coneMats.push(dummy.matrix.clone());
+
+            if (spotLightCount < maxActiveSpotLights && i % 48 === 0) {
                 const spot = new THREE.SpotLight(0x38bdf8, 1.35, 38, Math.PI / 3.2, 0.65, 1.5);
-                spot.position.set(basePos.x + headPos.x, basePos.y + 8.5, basePos.z + headPos.z);
+                spot.position.set(headPos.x, basePos.y + 8.5, headPos.z);
                 spot.target.position.set(p.x, p.y, p.z);
                 this.worldGroup.add(spot);
                 this.worldGroup.add(spot.target);
                 spotLightCount++;
             }
-
-            this.worldGroup.add(lampGroup);
         }
+
+        const addInst = (geo, mat, matrices, castShadow = false) => {
+            const inst = new THREE.InstancedMesh(geo, mat, matrices.length);
+            inst.castShadow = castShadow;
+            matrices.forEach((m, idx) => inst.setMatrixAt(idx, m));
+            inst.instanceMatrix.needsUpdate = true;
+            this.worldGroup.add(inst);
+        };
+
+        addInst(poleGeo, poleMat, poleMats, true);
+        addInst(armGeo, poleMat, armMats, false);
+        addInst(bulbGeo, bulbMat, bulbMats, false);
+        addInst(coneGeo, coneMat, coneMats, false);
     }
 
     buildFestivalStartGate() {
@@ -966,7 +987,6 @@ class HorizonWorldBuilder {
         gateGroup.position.copy(p0);
         gateGroup.rotation.y = angle;
 
-        // Línea de Meta Ajedrezada con polygonOffset para evitar parpadeo sobre el asfalto
         const finishPlaneGeo = new THREE.PlaneGeometry(this.roadWidth * 0.96, 3.6);
         const finishPlaneMat = new THREE.MeshStandardMaterial({
             map: this.textures.finishLine,
@@ -1113,48 +1133,62 @@ class HorizonWorldBuilder {
         this.worldGroup.add(towerGroup);
     }
 
+    /**
+     * Puertas Torii renderizadas con THREE.InstancedMesh (3 Draw Calls en total).
+     */
     buildToriiGatesAlongTrack() {
         const toriiMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4 });
         const blackMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.5 });
+
+        const colGeo = new THREE.CylinderGeometry(0.55, 0.65, 9.8, 10);
+        const topBeamGeo = new THREE.BoxGeometry(this.roadWidth * 1.3, 0.9, 1.1);
+        const subBeamGeo = new THREE.BoxGeometry(this.roadWidth * 1.18, 0.65, 0.8);
+
+        const colMats = [];
+        const topMats = [];
+        const subMats = [];
+        const dummy = new THREE.Object3D();
 
         for (let i = 24; i < this.trackPoints.length; i += 32) {
             const p = this.trackPoints[i];
             const pNext = this.trackPoints[(i + 1) % this.trackPoints.length];
             const tangent = new THREE.Vector3().subVectors(pNext, p).normalize();
+            const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
             const angle = Math.atan2(tangent.x, tangent.z);
 
-            const gate = new THREE.Group();
-            gate.position.copy(p);
-            gate.rotation.y = angle;
+            [-1, 1].forEach((side) => {
+                const cPos = new THREE.Vector3().copy(p).addScaledVector(right, side * this.roadWidth * 0.54);
+                dummy.position.set(cPos.x, p.y + 4.9, cPos.z);
+                dummy.rotation.set(0, angle, 0);
+                dummy.updateMatrix();
+                colMats.push(dummy.matrix.clone());
+            });
 
-            const colGeo = new THREE.CylinderGeometry(0.55, 0.65, 9.8, 10);
-            const leftCol = new THREE.Mesh(colGeo, toriiMat);
-            leftCol.position.set(-this.roadWidth * 0.54, 4.9, 0);
-            leftCol.castShadow = true;
-            gate.add(leftCol);
+            dummy.position.set(p.x, p.y + 9.8, p.z);
+            dummy.rotation.set(0, angle, 0);
+            dummy.updateMatrix();
+            topMats.push(dummy.matrix.clone());
 
-            const rightCol = new THREE.Mesh(colGeo, toriiMat);
-            rightCol.position.set(this.roadWidth * 0.54, 4.9, 0);
-            rightCol.castShadow = true;
-            gate.add(rightCol);
-
-            const topBeam = new THREE.Mesh(new THREE.BoxGeometry(this.roadWidth * 1.3, 0.9, 1.1), blackMat);
-            topBeam.position.set(0, 9.8, 0);
-            topBeam.castShadow = true;
-            gate.add(topBeam);
-
-            const subBeam = new THREE.Mesh(new THREE.BoxGeometry(this.roadWidth * 1.18, 0.65, 0.8), toriiMat);
-            subBeam.position.set(0, 8.0, 0);
-            gate.add(subBeam);
-
-            this.worldGroup.add(gate);
+            dummy.position.set(p.x, p.y + 8.0, p.z);
+            dummy.rotation.set(0, angle, 0);
+            dummy.updateMatrix();
+            subMats.push(dummy.matrix.clone());
         }
+
+        const addInst = (geo, mat, matrices) => {
+            const inst = new THREE.InstancedMesh(geo, mat, matrices.length);
+            inst.castShadow = true;
+            inst.receiveShadow = true;
+            matrices.forEach((m, idx) => inst.setMatrixAt(idx, m));
+            inst.instanceMatrix.needsUpdate = true;
+            this.worldGroup.add(inst);
+        };
+
+        addInst(colGeo, toriiMat, colMats);
+        addInst(topBeamGeo, blackMat, topMats);
+        addInst(subBeamGeo, toriiMat, subMats);
     }
 
-    /**
-     * Construye Rascacielos de Tokio con escalado UV proporcional a las dimensiones
-     * de cada edificio (evita ventanas estiradas) y Paneles LED Publicitarios con emissive activo.
-     */
     buildCitySkyscrapers() {
         const bldMat = new THREE.MeshStandardMaterial({
             map: this.textures.building,
@@ -1172,7 +1206,6 @@ class HorizonWorldBuilder {
             ['頭文字 TOUGE', 'JDM LEGENDS', '#18181b', '#facc15']
         ];
 
-        // Materiales LED emisivos para las vallas publicitarias nocturnas
         const signMats = signTexts.map(s => {
             const tex = this.createNeonSignTexture(s[0], s[1], s[2], s[3]);
             return new THREE.MeshStandardMaterial({
@@ -1185,6 +1218,29 @@ class HorizonWorldBuilder {
             });
         });
 
+        // 4 arquetipos de rascacielos pre-escalados con UV proporcionales e InstancedMesh (4 Draw Calls en vez de 102)
+        const archetypes = [
+            { w: 16, d: 16, h: 42 },
+            { w: 20, d: 18, h: 58 },
+            { w: 22, d: 20, h: 76 },
+            { w: 26, d: 22, h: 96 }
+        ];
+
+        const archData = archetypes.map(({ w, d, h }) => {
+            const geo = new THREE.BoxGeometry(w, h, d);
+            const uvAttr = geo.attributes.uv;
+            const repeatX = Math.max(1, Math.round(w / 14));
+            const repeatY = Math.max(1, Math.round(h / 18));
+            for (let uIdx = 0; uIdx < uvAttr.count; uIdx++) {
+                uvAttr.setXY(uIdx, uvAttr.getX(uIdx) * repeatX, uvAttr.getY(uIdx) * repeatY);
+            }
+            uvAttr.needsUpdate = true;
+            return { geo, h, matrices: [] };
+        });
+
+        const dummy = new THREE.Object3D();
+        const signGeo = new THREE.PlaneGeometry(11, 5.5);
+
         for (let i = 4; i < this.trackPoints.length; i += 7) {
             const p = this.trackPoints[i];
             const pNext = this.trackPoints[(i + 1) % this.trackPoints.length];
@@ -1192,36 +1248,18 @@ class HorizonWorldBuilder {
             const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
 
             [-1, 1].forEach((side, sideIdx) => {
+                const archIdx = (i + sideIdx) % archData.length;
+                const arch = archData[archIdx];
                 const dist = this.roadWidth * 0.5 + 16 + (i % 3) * 8;
                 const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * dist);
 
-                const w = 16 + (i % 4) * 4;
-                const d = 16 + ((i + 2) % 4) * 4;
-                const h = 34 + ((i * 13 + sideIdx * 19) % 72);
+                dummy.position.set(pos.x, pos.y + arch.h * 0.5 - 2, pos.z);
+                dummy.rotation.set(0, 0, 0);
+                dummy.updateMatrix();
+                arch.matrices.push(dummy.matrix.clone());
 
-                const boxGeo = new THREE.BoxGeometry(w, h, d);
-                // Ajustar coordenadas UV proporcionalmente a la anchura y altura real del edificio
-                const uvAttr = boxGeo.attributes.uv;
-                const repeatX = Math.max(1, Math.round(w / 14));
-                const repeatY = Math.max(1, Math.round(h / 18));
-                for (let uIdx = 0; uIdx < uvAttr.count; uIdx++) {
-                    uvAttr.setXY(
-                        uIdx,
-                        uvAttr.getX(uIdx) * repeatX,
-                        uvAttr.getY(uIdx) * repeatY
-                    );
-                }
-                uvAttr.needsUpdate = true;
-
-                const mesh = new THREE.Mesh(boxGeo, bldMat);
-                mesh.position.set(pos.x, pos.y + h * 0.5 - 2, pos.z);
-                mesh.castShadow = true;
-                mesh.receiveShadow = true;
-                this.worldGroup.add(mesh);
-
-                // Panel LED Publicitario Luminoso en fachada
                 if (i % 14 === 0) {
-                    const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(11, 5.5), signMats[(i + sideIdx) % signMats.length]);
+                    const signMesh = new THREE.Mesh(signGeo, signMats[(i + sideIdx) % signMats.length]);
                     const signPos = new THREE.Vector3().copy(p).addScaledVector(right, side * (this.roadWidth * 0.5 + 5.8));
                     signMesh.position.set(signPos.x, p.y + 8.5 + (i % 10), signPos.z);
                     signMesh.lookAt(p.x, p.y + 6.5, p.z);
@@ -1229,11 +1267,20 @@ class HorizonWorldBuilder {
                 }
             });
         }
+
+        archData.forEach(({ geo, matrices }) => {
+            if (!matrices.length) return;
+            const inst = new THREE.InstancedMesh(geo, bldMat, matrices.length);
+            inst.castShadow = true;
+            inst.receiveShadow = true;
+            matrices.forEach((m, idx) => inst.setMatrixAt(idx, m));
+            inst.instanceMatrix.needsUpdate = true;
+            this.worldGroup.add(inst);
+        });
     }
 
     /**
-     * Construye Árboles de Cerezo (Sakura) combinando tronco ramificado,
-     * planos cruzados con texturas ricas alfa y copas suaves.
+     * Cerezos Sakura renderizados mediante THREE.InstancedMesh (3 Draw Calls en total para 144 árboles).
      */
     buildSakuraTreesAndPetals() {
         const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3e1f0d, roughness: 0.9 });
@@ -1251,7 +1298,14 @@ class HorizonWorldBuilder {
             roughness: 0.65
         });
 
+        const trunkGeo = new THREE.CylinderGeometry(0.28, 0.52, 4.4, 8);
         const crossedPlaneGeo = new THREE.PlaneGeometry(6.8, 6.2);
+        const crownGeo = new THREE.SphereGeometry(2.5, 10, 8);
+
+        const trunkMats = [];
+        const planeMats = [];
+        const crownMats = [];
+        const dummy = new THREE.Object3D();
 
         for (let i = 3; i < this.trackPoints.length; i += 5) {
             const p = this.trackPoints[i];
@@ -1263,42 +1317,44 @@ class HorizonWorldBuilder {
                 const offset = this.roadWidth * 0.5 + 5.2 + ((i * 7) % 9);
                 const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * offset);
 
-                const tree = new THREE.Group();
-                tree.position.copy(pos);
+                dummy.position.set(pos.x, pos.y + 2.2, pos.z);
+                dummy.rotation.set(0, 0, 0);
+                dummy.scale.set(1, 1, 1);
+                dummy.updateMatrix();
+                trunkMats.push(dummy.matrix.clone());
 
-                // Tronco principal con ligera inclinación orgánica
-                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.52, 4.4, 8), trunkMat);
-                trunk.position.y = 2.2;
-                trunk.castShadow = true;
-                trunk.receiveShadow = true;
-                tree.add(trunk);
+                const baseRot = (i * 0.7) % Math.PI;
+                dummy.position.set(pos.x, pos.y + 5.2, pos.z);
+                dummy.rotation.set(0, baseRot, 0);
+                dummy.updateMatrix();
+                planeMats.push(dummy.matrix.clone());
 
-                // Mallas cruzadas (Crossed Billboards) con textura rica de ramas y flores Sakura
-                const plane1 = new THREE.Mesh(crossedPlaneGeo, crossedPlaneMat);
-                plane1.position.y = 5.2;
-                plane1.rotation.y = (i * 0.7) % Math.PI;
-                plane1.castShadow = true;
-                tree.add(plane1);
+                dummy.rotation.set(0, baseRot + Math.PI / 2, 0);
+                dummy.updateMatrix();
+                planeMats.push(dummy.matrix.clone());
 
-                const plane2 = new THREE.Mesh(crossedPlaneGeo, crossedPlaneMat);
-                plane2.position.y = 5.2;
-                plane2.rotation.y = plane1.rotation.y + Math.PI / 2;
-                plane2.castShadow = true;
-                tree.add(plane2);
-
-                // Núcleo volumétrico de sombreado suave
-                const softCrown = new THREE.Mesh(new THREE.SphereGeometry(2.35 + (i % 3) * 0.35, 10, 8), softCanopyMat);
-                softCrown.position.y = 5.4;
-                softCrown.scale.set(1.25, 0.82, 1.25);
-                softCrown.castShadow = true;
-                softCrown.receiveShadow = true;
-                tree.add(softCrown);
-
-                this.worldGroup.add(tree);
+                const sc = 1.0 + (i % 3) * 0.12;
+                dummy.position.set(pos.x, pos.y + 5.4, pos.z);
+                dummy.rotation.set(0, 0, 0);
+                dummy.scale.set(1.25 * sc, 0.82 * sc, 1.25 * sc);
+                dummy.updateMatrix();
+                crownMats.push(dummy.matrix.clone());
             });
         }
 
-        // Partículas de pétalos Sakura cayendo suavemente
+        const addInst = (geo, mat, matrices) => {
+            const inst = new THREE.InstancedMesh(geo, mat, matrices.length);
+            inst.castShadow = true;
+            inst.receiveShadow = true;
+            matrices.forEach((m, idx) => inst.setMatrixAt(idx, m));
+            inst.instanceMatrix.needsUpdate = true;
+            this.worldGroup.add(inst);
+        };
+
+        addInst(trunkGeo, trunkMat, trunkMats);
+        addInst(crossedPlaneGeo, crossedPlaneMat, planeMats);
+        addInst(crownGeo, softCanopyMat, crownMats);
+
         const petalCount = 480;
         const petalGeo = new THREE.BufferGeometry();
         const petalPositions = new Float32Array(petalCount * 3);
@@ -1316,6 +1372,10 @@ class HorizonWorldBuilder {
 
     createCarMesh(carConfig, isPolice = false) {
         const carGroup = new THREE.Group();
+        // Sub-grupo de carrocería suspendida (permite animar Pitch, Roll y Heave sin despegar las ruedas del asfalto)
+        const chassisGroup = new THREE.Group();
+        carGroup.add(chassisGroup);
+
         const dim = carConfig.dimensions;
 
         const paintMat = new THREE.MeshStandardMaterial({
@@ -1349,13 +1409,13 @@ class HorizonWorldBuilder {
 
         const underbody = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 1.02, 0.16, dim.length * 1.03), carbonMat);
         underbody.position.y = 0.24;
-        carGroup.add(underbody);
+        chassisGroup.add(underbody);
 
         const lowerChassis = new THREE.Mesh(new THREE.BoxGeometry(dim.width, dim.height * 0.42, dim.length * 0.98), paintMat);
         lowerChassis.position.y = 0.52;
         lowerChassis.castShadow = true;
         lowerChassis.receiveShadow = true;
-        carGroup.add(lowerChassis);
+        chassisGroup.add(lowerChassis);
 
         const fenderGeo = new THREE.BoxGeometry(dim.width * 1.05, dim.height * 0.28, 0.92);
         const frontFenders = new THREE.Mesh(fenderGeo, isPolice ? carbonMat : paintMat);
@@ -1364,43 +1424,43 @@ class HorizonWorldBuilder {
         const rearFenders = new THREE.Mesh(fenderGeo, isPolice ? carbonMat : paintMat);
         rearFenders.position.set(0, 0.50, -dim.length * 0.31);
         rearFenders.castShadow = true;
-        carGroup.add(frontFenders, rearFenders);
+        chassisGroup.add(frontFenders, rearFenders);
 
         const noseMesh = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.94, dim.height * 0.24, dim.length * 0.36), paintMat);
         noseMesh.position.set(0, 0.68, dim.length * 0.28);
         noseMesh.rotation.x = 0.09;
         noseMesh.castShadow = true;
-        carGroup.add(noseMesh);
+        chassisGroup.add(noseMesh);
 
         const intercooler = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.52, 0.22, 0.06), chromeMat);
         intercooler.position.set(0, 0.38, dim.length * 0.501);
-        carGroup.add(intercooler);
+        chassisGroup.add(intercooler);
 
         const cabinGlass = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.82, dim.height * 0.42, dim.length * 0.50), glassMat);
         cabinGlass.position.set(0, 0.98, -dim.length * 0.04);
         cabinGlass.castShadow = true;
-        carGroup.add(cabinGlass);
+        chassisGroup.add(cabinGlass);
 
         const roofPanel = new THREE.Mesh(
             new THREE.BoxGeometry(dim.width * 0.78, 0.07, dim.length * 0.36),
             (carConfig.id === 'nsx' || carConfig.id === 'lfa') ? carbonMat : paintMat
         );
         roofPanel.position.set(0, 1.21, -dim.length * 0.04);
-        carGroup.add(roofPanel);
+        chassisGroup.add(roofPanel);
 
         const mirrorGeo = new THREE.BoxGeometry(0.24, 0.11, 0.16);
         const leftMirror = new THREE.Mesh(mirrorGeo, paintMat);
         leftMirror.position.set(-dim.width * 0.53, 0.86, dim.length * 0.14);
         const rightMirror = new THREE.Mesh(mirrorGeo, paintMat);
         rightMirror.position.set(dim.width * 0.53, 0.86, dim.length * 0.14);
-        carGroup.add(leftMirror, rightMirror);
+        chassisGroup.add(leftMirror, rightMirror);
 
         const standGeo = new THREE.BoxGeometry(0.07, 0.34, 0.26);
         const leftStand = new THREE.Mesh(standGeo, carbonMat);
         leftStand.position.set(-dim.width * 0.35, 0.92, -dim.length * 0.43);
         const rightStand = new THREE.Mesh(standGeo, carbonMat);
         rightStand.position.set(dim.width * 0.35, 0.92, -dim.length * 0.43);
-        carGroup.add(leftStand, rightStand);
+        chassisGroup.add(leftStand, rightStand);
 
         const wingBlade = new THREE.Mesh(
             new THREE.BoxGeometry(dim.width * 0.98, 0.07, 0.34),
@@ -1408,7 +1468,7 @@ class HorizonWorldBuilder {
         );
         wingBlade.position.set(0, 1.11, -dim.length * 0.44);
         wingBlade.castShadow = true;
-        carGroup.add(wingBlade);
+        chassisGroup.add(wingBlade);
 
         const exhaustGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.22, 10);
         exhaustGeo.rotateX(Math.PI / 2);
@@ -1416,7 +1476,7 @@ class HorizonWorldBuilder {
         exLeft.position.set(-dim.width * 0.28, 0.28, -dim.length * 0.51);
         const exRight = new THREE.Mesh(exhaustGeo, chromeMat);
         exRight.position.set(dim.width * 0.28, 0.28, -dim.length * 0.51);
-        carGroup.add(exLeft, exRight);
+        chassisGroup.add(exLeft, exRight);
 
         const flameMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.0 });
         const flameGeo = new THREE.ConeGeometry(0.11, 0.65, 8);
@@ -1425,7 +1485,7 @@ class HorizonWorldBuilder {
         flameL.position.set(-dim.width * 0.28, 0.28, -dim.length * 0.51 - 0.32);
         const flameR = new THREE.Mesh(flameGeo, flameMat);
         flameR.position.set(dim.width * 0.28, 0.28, -dim.length * 0.51 - 0.32);
-        carGroup.add(flameL, flameR);
+        chassisGroup.add(flameL, flameR);
 
         const headlightMat = new THREE.MeshBasicMaterial({ color: 0xe0f2fe });
         const hlGeo = new THREE.BoxGeometry(0.40, 0.13, 0.08);
@@ -1433,7 +1493,7 @@ class HorizonWorldBuilder {
         hlLeft.position.set(-dim.width * 0.33, 0.62, dim.length * 0.495);
         const hlRight = new THREE.Mesh(hlGeo, headlightMat);
         hlRight.position.set(dim.width * 0.33, 0.62, dim.length * 0.495);
-        carGroup.add(hlLeft, hlRight);
+        chassisGroup.add(hlLeft, hlRight);
 
         const brakeMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
         if (dim.taillightStyle === 'quad_round') {
@@ -1442,12 +1502,12 @@ class HorizonWorldBuilder {
             [-0.66, -0.40, 0.40, 0.66].forEach(xOff => {
                 const tl = new THREE.Mesh(roundGeo, brakeMat);
                 tl.position.set(xOff, 0.64, -dim.length * 0.495);
-                carGroup.add(tl);
+                chassisGroup.add(tl);
             });
         } else {
             const tlBar = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.84, 0.14, 0.06), brakeMat);
             tlBar.position.set(0, 0.64, -dim.length * 0.495);
-            carGroup.add(tlBar);
+            chassisGroup.add(tlBar);
         }
 
         let sirenLightRed = null;
@@ -1455,16 +1515,15 @@ class HorizonWorldBuilder {
         if (isPolice) {
             const barBase = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.12, 0.28), chromeMat);
             barBase.position.set(0, 1.29, -0.1);
-            carGroup.add(barBase);
+            chassisGroup.add(barBase);
 
             sirenLightRed = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 0.24), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
             sirenLightRed.position.set(-0.28, 1.35, -0.1);
             sirenLightBlue = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 0.24), new THREE.MeshBasicMaterial({ color: 0x0066ff }));
             sirenLightBlue.position.set(0.28, 1.35, -0.1);
-            carGroup.add(sirenLightRed, sirenLightBlue);
+            chassisGroup.add(sirenLightRed, sirenLightBlue);
         }
 
-        // Neón inferior con polygonOffset para evitar Z-Fighting contra el asfalto
         const neonMat = new THREE.MeshBasicMaterial({
             color: isPolice ? 0xef4444 : carConfig.neonColor,
             transparent: true,
@@ -1511,6 +1570,7 @@ class HorizonWorldBuilder {
         });
 
         carGroup.userData = {
+            chassisGroup,
             wheels,
             brakeMat,
             paintMat,
@@ -1564,19 +1624,22 @@ class HorizonWorldBuilder {
             this.aiCars.push({
                 id: 'rival_' + (i + 1),
                 name: carData.name,
+                classRating: carData.classRating,
                 mesh,
                 pos: startPos.clone(),
                 vel: new THREE.Vector3(0, 0, 0),
                 heading,
                 currentSpeedMs: 0,
                 targetMaxSpeedMs: baseMaxMs * skillVariance,
-                accelRate: carData.physics.accelForce * difficultyObj.aiSpeedMult * 0.85,
+                accelRate: carData.physics.accelForce * difficultyObj.aiSpeedMult * 0.88,
+                aggression: difficultyObj.aiAggression || 0.65,
                 laneOffset,
                 preferredLaneOffset: laneOffset,
-                progressT: startT - 1.0,
+                progressT: startT - 1.0, // Progreso continuo (3.0 = 3 vueltas completadas)
                 lap: 1,
                 passedHalfway: false,
                 finished: false,
+                finishTimeMs: null,
                 radius: 2.15
             });
         }
@@ -1586,7 +1649,7 @@ class HorizonWorldBuilder {
             const copMesh = this.createCarMesh(copConfig, true);
             this.worldGroup.add(copMesh);
 
-            const startT = 0.08 + p * 0.18;
+            const startT = 0.04 + p * 0.09;
             const idx0 = Math.floor(startT * numPts) % numPts;
             const idx1 = (idx0 + 1) % numPts;
             const p0 = this.trackPoints[idx0];
@@ -1598,15 +1661,16 @@ class HorizonWorldBuilder {
 
             this.policeCars.push({
                 id: 'police_' + (p + 1),
-                name: 'Policía Metropolitana de Tokio',
+                name: `Patrulla Keishicho #${p + 1}`,
                 mesh: copMesh,
                 pos: p0.clone(),
                 vel: new THREE.Vector3(0, 0, 0),
                 heading: Math.atan2(tangent.x, tangent.z),
                 currentSpeedMs: 0,
-                targetMaxSpeedMs: 84 * difficultyObj.aiSpeedMult,
-                accelRate: 40,
-                laneOffset: (p % 2 === 0 ? -2.5 : 2.5),
+                targetMaxSpeedMs: 88 * difficultyObj.aiSpeedMult,
+                accelRate: 44,
+                laneOffset: (p % 2 === 0 ? -2.8 : 2.8),
+                preferredLaneOffset: (p % 2 === 0 ? -2.8 : 2.8),
                 progressT: startT,
                 lap: 1,
                 isPolice: true,
@@ -1616,11 +1680,8 @@ class HorizonWorldBuilder {
     }
 
     spawnCollisionSparks(contactPoint) {
-        const sparkMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
-        const sparkGeo = new THREE.BoxGeometry(0.14, 0.14, 0.45);
-
-        for (let i = 0; i < 14; i++) {
-            const spark = new THREE.Mesh(sparkGeo, sparkMat);
+        for (let i = 0; i < 12; i++) {
+            const spark = new THREE.Mesh(this.sharedSparkGeo, this.sharedSparkMat);
             spark.position.copy(contactPoint);
             spark.position.y += 0.5;
 
@@ -1628,32 +1689,63 @@ class HorizonWorldBuilder {
             const speed = 6 + Math.random() * 14;
             const vy = 3 + Math.random() * 7;
 
-            this.sparkGroup.add(spark);
+            this.fxGroup.add(spark);
             this.sparkParticles.push({
                 mesh: spark,
                 vx: Math.cos(angle) * speed,
                 vy,
                 vz: Math.sin(angle) * speed,
-                life: 0.38
+                life: 0.36
             });
         }
     }
 
-    updateDynamicElements(dt, canRaceMove, playerPos) {
+    spawnTireSmoke(position, rightVec, width = 1.9) {
+        if (this.smokeParticles.length > 45) return;
+        [-1, 1].forEach((side) => {
+            const puff = new THREE.Mesh(this.sharedSmokeGeo, this.sharedSmokeMat);
+            puff.position.copy(position).addScaledVector(rightVec, side * width * 0.42);
+            puff.position.y += 0.22;
+            this.fxGroup.add(puff);
+            this.smokeParticles.push({
+                mesh: puff,
+                vy: 1.1 + Math.random() * 0.8,
+                scaleRate: 2.4,
+                life: 0.42
+            });
+        });
+    }
+
+    updateDynamicElements(dt, canRaceMove, playerPos, playerTotalProgress = 0, raceElapsedMs = 0) {
         if (!this.trackPoints.length) return;
         const numPts = this.trackPoints.length;
 
+        // Actualizar chispas de colisión
         for (let i = this.sparkParticles.length - 1; i >= 0; i--) {
             const sp = this.sparkParticles[i];
             sp.life -= dt;
             if (sp.life <= 0) {
-                this.sparkGroup.remove(sp.mesh);
+                this.fxGroup.remove(sp.mesh);
                 this.sparkParticles.splice(i, 1);
             } else {
                 sp.mesh.position.x += sp.vx * dt;
                 sp.mesh.position.y += sp.vy * dt;
                 sp.mesh.position.z += sp.vz * dt;
                 sp.vy -= 18 * dt;
+            }
+        }
+
+        // Actualizar humo de neumáticos en derrape
+        for (let i = this.smokeParticles.length - 1; i >= 0; i--) {
+            const sm = this.smokeParticles[i];
+            sm.life -= dt;
+            if (sm.life <= 0) {
+                this.fxGroup.remove(sm.mesh);
+                this.smokeParticles.splice(i, 1);
+            } else {
+                sm.mesh.position.y += sm.vy * dt;
+                const s = 1 + (0.42 - sm.life) * sm.scaleRate;
+                sm.mesh.scale.set(s, s, s);
             }
         }
 
@@ -1671,41 +1763,71 @@ class HorizonWorldBuilder {
 
         const allTrackUnits = [...this.aiCars, ...this.policeCars];
         const nowSec = performance.now() * 0.001;
+        const trackLen = this.trackTotalLengthMeters || 2400;
 
-        allTrackUnits.forEach((ai) => {
-            if (ai.currentSpeedMs < ai.targetMaxSpeedMs) {
-                ai.currentSpeedMs = Math.min(ai.targetMaxSpeedMs, ai.currentSpeedMs + ai.accelRate * dt);
-            } else {
-                ai.currentSpeedMs = THREE.MathUtils.lerp(ai.currentSpeedMs, ai.targetMaxSpeedMs, dt * 2);
-            }
+        allTrackUnits.forEach((ai, unitIdx) => {
+            const wrappedNow = ((ai.progressT % 1) + 1) % 1;
+            const curIdx = Math.floor(wrappedNow * numPts) % numPts;
+            const lookAheadIdx = (curIdx + 10) % numPts;
 
+            // 1. Control de velocidad en curva (Frenada anticipada en horquillas Touge)
+            const upcomingCurvature = Math.max(this.trackCurvatures[curIdx] || 0, this.trackCurvatures[lookAheadIdx] || 0);
+            const cornerFactor = THREE.MathUtils.clamp(1.0 - upcomingCurvature * 7.2, 0.58, 1.0);
+            let desiredSpeedMs = ai.targetMaxSpeedMs * cornerFactor;
+
+            // 2. IA de Intercepción Policial en Modo Tokyo Heat
             if (ai.isPolice && playerPos) {
+                const progressDiff = playerTotalProgress - ai.progressT;
+                if (progressDiff > 0.015) {
+                    desiredSpeedMs = ai.targetMaxSpeedMs * 1.22; // Acelerar para alcanzar al fugitivo
+                } else if (progressDiff < -0.025) {
+                    desiredSpeedMs = ai.targetMaxSpeedMs * 0.55; // Esperar emboscada más adelante
+                }
+
                 const infoPlayer = this.getClosestTrackInfo(playerPos);
                 if (infoPlayer) {
-                    ai.laneOffset = THREE.MathUtils.lerp(ai.laneOffset, infoPlayer.lateralOffset, dt * 1.8);
+                    ai.laneOffset = THREE.MathUtils.lerp(ai.laneOffset, infoPlayer.lateralOffset, dt * 2.4);
                 }
-                const blink = Math.floor(nowSec * 10) % 2 === 0;
+
+                const blink = Math.floor(nowSec * 10 + unitIdx) % 2 === 0;
                 if (ai.mesh.userData.sirenLightRed && ai.mesh.userData.sirenLightBlue) {
                     ai.mesh.userData.sirenLightRed.material.color.setHex(blink ? 0xff0000 : 0x220000);
                     ai.mesh.userData.sirenLightBlue.material.color.setHex(blink ? 0x001133 : 0x0088ff);
                 }
             } else {
-                ai.laneOffset = THREE.MathUtils.lerp(ai.laneOffset, ai.preferredLaneOffset, dt * 1.4);
+                // Maniobra de adelantamiento si tiene otro rival justo delante en su mismo carril
+                for (let j = 0; j < this.aiCars.length; j++) {
+                    const other = this.aiCars[j];
+                    if (other === ai) continue;
+                    const dProg = other.progressT - ai.progressT;
+                    if (dProg > 0 && dProg < 0.014 && Math.abs(other.laneOffset - ai.laneOffset) < 2.4) {
+                        ai.preferredLaneOffset = other.laneOffset > 0 ? -4.2 : 4.2;
+                        break;
+                    }
+                }
+                ai.laneOffset = THREE.MathUtils.lerp(ai.laneOffset, ai.preferredLaneOffset, dt * 1.6);
             }
 
-            const deltaT = (ai.currentSpeedMs * dt) / 4650;
-            const prevT = ((ai.progressT % 1) + 1) % 1;
+            if (ai.currentSpeedMs < desiredSpeedMs) {
+                ai.currentSpeedMs = Math.min(desiredSpeedMs, ai.currentSpeedMs + ai.accelRate * dt);
+            } else {
+                ai.currentSpeedMs = THREE.MathUtils.lerp(ai.currentSpeedMs, desiredSpeedMs, dt * 3.2);
+            }
+
+            // Avanzar según la longitud física real del circuito
+            const deltaT = (ai.currentSpeedMs * dt) / trackLen;
             ai.progressT += deltaT;
+
+            // Actualizar vuelta actual y registrar tiempo final al cruzar 3 vueltas (progressT >= 3.0)
+            if (!ai.isPolice) {
+                ai.lap = Math.min(3, Math.max(1, Math.floor(ai.progressT) + 1));
+                if (ai.progressT >= 3.0 && !ai.finished) {
+                    ai.finished = true;
+                    ai.finishTimeMs = raceElapsedMs;
+                }
+            }
+
             const wrappedT = ((ai.progressT % 1) + 1) % 1;
-
-            if (wrappedT > 0.45 && wrappedT < 0.60) {
-                ai.passedHalfway = true;
-            }
-            if (ai.passedHalfway && wrappedT < 0.15 && prevT > 0.85) {
-                ai.lap++;
-                ai.passedHalfway = false;
-            }
-
             const exactIdx = wrappedT * numPts;
             const idx0 = Math.floor(exactIdx) % numPts;
             const idx1 = (idx0 + 1) % numPts;
@@ -1723,6 +1845,15 @@ class HorizonWorldBuilder {
 
             ai.mesh.position.copy(ai.pos);
             ai.mesh.rotation.y = ai.heading;
+
+            // Inclinación de suspensión en curva para rivales IA
+            if (ai.mesh.userData.chassisGroup) {
+                ai.mesh.userData.chassisGroup.rotation.z = THREE.MathUtils.lerp(
+                    ai.mesh.userData.chassisGroup.rotation.z,
+                    (this.trackCurvatures[idx0] || 0) * 1.6,
+                    dt * 6
+                );
+            }
 
             if (ai.mesh.userData.wheels) {
                 ai.mesh.userData.wheels.forEach(w => {

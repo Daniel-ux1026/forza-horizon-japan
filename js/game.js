@@ -15,16 +15,23 @@ class HorizonGameEngine {
         this.selectedTuningIndex = 0;     // Stage 1 por defecto
 
         this.maxLaps = 3;
-        this.raceState = 'garage'; // 'garage' | 'countdown' | 'racing' | 'finished'
+        this.raceState = 'garage'; // 'garage' | 'countdown' | 'racing' | 'paused' | 'finished'
         this.cameraMode = 0;
         this.cameraShake = 0;
+        this.pauseStartedAt = 0;
 
-        // Estado físico del vehículo del jugador
+        // Estado físico del vehículo del jugador y suspensión de 4 ruedas
         this.carPos = new THREE.Vector3(0, 0, 0);
         this.carVel = new THREE.Vector3(0, 0, 0);
         this.carHeading = 0;
         this.visualDriftAngle = 0;
         this.speedKmh = 0;
+        this.prevForwardSpeed = 0;
+        this.suspPitch = 0;
+        this.suspRoll = 0;
+        this.suspHeave = 0;
+        this.suspHeaveVel = 0;
+        this.smokeAccum = 0;
         this.rpm = 1000;
         this.gear = 1;
         this.nitroAmount = 100;
@@ -33,6 +40,8 @@ class HorizonGameEngine {
         // Progreso de carrera y tiempos
         this.lapCount = 1;
         this.playerProgressT = 0;
+        this.playerTotalProgress = -0.016;
+        this.crossedStartLine = false;
         this.passedHalfway = false;
         this.lastTrackIndex = 0;
         this.playerPositionRank = 7;
@@ -40,9 +49,10 @@ class HorizonGameEngine {
         this.lapStartTime = 0;
         this.bestLapMs = null;
 
-        // Modo Contrarreloj por Checkpoints
+        // Modo Contrarreloj por Checkpoints y Persecución Policial
         this.checkpointTimeLeft = 28.0;
         this.nextCheckpointIdx = 0;
+        this.policeBustProgress = 0;
 
         // Puntuación de Drift
         this.totalSkillScore = 0;
@@ -232,20 +242,33 @@ class HorizonGameEngine {
         this.carHeading = Math.atan2(tangent.x, tangent.z);
         this.visualDriftAngle = 0;
         this.speedKmh = 0;
+        this.prevForwardSpeed = 0;
+        this.suspPitch = 0;
+        this.suspRoll = 0;
+        this.suspHeave = 0;
+        this.suspHeaveVel = 0;
         this.nitroAmount = 100;
 
         this.lapCount = 1;
-        this.playerProgressT = -0.016;
+        this.playerProgressT = playerStartIdx / numPts;
+        this.playerTotalProgress = (playerStartIdx - numPts) / numPts;
+        this.crossedStartLine = false;
         this.passedHalfway = false;
         this.lastTrackIndex = playerStartIdx;
         this.playerPositionRank = 7;
 
-        this.checkpointTimeLeft = 28.0;
+        const diffCfg = window.FH6_DATA.difficulties[this.selectedDifficultyIndex] || window.FH6_DATA.difficulties[1];
+        this.checkpointTimeLeft = 22.0 + diffCfg.checkpointBonusSec;
         this.nextCheckpointIdx = 0;
+        this.policeBustProgress = 0;
 
         if (this.playerCarMesh) {
             this.playerCarMesh.position.copy(this.carPos);
             this.playerCarMesh.rotation.set(0, this.carHeading, 0);
+            if (this.playerCarMesh.userData.chassisGroup) {
+                this.playerCarMesh.userData.chassisGroup.position.set(0, 0, 0);
+                this.playerCarMesh.userData.chassisGroup.rotation.set(0, 0, 0);
+            }
         }
         this.updateCamera(0.1);
     }
@@ -255,6 +278,7 @@ class HorizonGameEngine {
         window.horizonAudio.init();
         this.toggleGarageModal(false);
         this.hideFinishModal();
+        this.hidePauseModal();
 
         this.countdownTimers.forEach(t => clearTimeout(t));
         this.countdownTimers = [];
@@ -263,6 +287,7 @@ class HorizonGameEngine {
         this.raceState = 'countdown';
         this.totalSkillScore = 0;
         this.currentDriftChain = 0;
+        this.bestLapMs = null;
 
         const mapSubEl = document.getElementById('hud-map-subtitle');
         if (mapSubEl) {
@@ -340,8 +365,16 @@ class HorizonGameEngine {
                 this.startNewRace();
             } else if (code === 'KeyM' || code === 'KeyN') {
                 window.horizonAudio.nextTrack();
-            } else if (code === 'KeyG' || code === 'Escape') {
+            } else if (code === 'KeyP') {
+                this.togglePauseRace();
+            } else if (code === 'KeyG') {
                 this.toggleGarageModal();
+            } else if (code === 'Escape') {
+                if (this.raceState === 'racing' || this.raceState === 'paused') {
+                    this.togglePauseRace();
+                } else {
+                    this.toggleGarageModal();
+                }
             }
         });
 
@@ -511,6 +544,11 @@ class HorizonGameEngine {
                     }
                     ai.currentSpeedMs = Math.max(8, ai.currentSpeedMs - Math.abs(impactSpeed) * 0.22);
 
+                    // Si es una patrulla policial en Modo Persecución, incrementa el medidor de arresto al embestir
+                    if (ai.isPolice) {
+                        this.policeBustProgress = Math.min(100, this.policeBustProgress + 8.5);
+                    }
+
                     // Efectos visuales y sonoros de choque real
                     if (this.collisionCooldown <= 0 && Math.abs(impactSpeed) > 3.5) {
                         const contactPt = new THREE.Vector3(
@@ -553,8 +591,8 @@ class HorizonGameEngine {
         const phys = this.currentCarConfig.physics;
         const tuning = window.FH6_DATA.tuningStages[this.selectedTuningIndex] || window.FH6_DATA.tuningStages[0];
 
-        // Si estamos en el conteo "PREPARADOS, LISTOS", el jugador puede revolucionar el motor sin avanzar
-        if (this.raceState === 'countdown' || this.raceState === 'garage' || this.raceState === 'finished') {
+        // Si estamos en el conteo "PREPARADOS, LISTOS", en pausa o en menú, no avanzar física
+        if (this.raceState === 'countdown' || this.raceState === 'garage' || this.raceState === 'paused' || this.raceState === 'finished') {
             if (this.input.throttle > 0 && this.raceState === 'countdown') {
                 this.rpm = Math.min(phys.redlineRpm, this.rpm + 6500 * dt);
             } else {
@@ -563,7 +601,7 @@ class HorizonGameEngine {
             window.horizonAudio.updateEngine(
                 this.rpm,
                 phys.redlineRpm,
-                this.input.throttle > 0,
+                this.input.throttle > 0 && this.raceState === 'countdown',
                 false,
                 phys.engineBaseFreq,
                 this.raceState !== 'countdown',
@@ -674,6 +712,11 @@ class HorizonGameEngine {
             }
 
             this.playerProgressT = trackInfo.progressT;
+            if (trackInfo.index < 60 && this.lastTrackIndex > 300) {
+                this.crossedStartLine = true;
+            } else if (trackInfo.index >= 4 && trackInfo.index < 180) {
+                this.crossedStartLine = true;
+            }
 
             // Verificar paso por mitad de circuito para validar vuelta completa
             if (trackInfo.index > 150 && trackInfo.index < 210) {
@@ -690,7 +733,11 @@ class HorizonGameEngine {
 
                 if (this.lapCount >= this.maxLaps) {
                     // ¡FIN DE LAS 3 VUELTAS!
+                    this.lapCount = this.maxLaps;
+                    this.playerTotalProgress = this.maxLaps + this.playerProgressT;
+                    this.calculateRacePosition();
                     this.finishRace(true);
+                    return;
                 } else {
                     this.lapCount++;
                     window.horizonAudio.playCheckpointSound();
@@ -703,14 +750,22 @@ class HorizonGameEngine {
             if (modeObj.id === 'checkpoint_time' && this.world.checkpoints.length > 0) {
                 this.checkpointTimeLeft = Math.max(0, this.checkpointTimeLeft - dt);
                 const targetCp = this.world.checkpoints[this.nextCheckpointIdx];
-                if (targetCp && Math.abs(trackInfo.index - targetCp.index) <= 8) {
-                    const diffObj = window.FH6_DATA.difficulties[this.selectedDifficultyIndex];
-                    this.checkpointTimeLeft += diffObj.checkpointBonusSec;
-                    this.nextCheckpointIdx = (this.nextCheckpointIdx + 1) % this.world.checkpoints.length;
-                    window.horizonAudio.playCheckpointSound();
+                if (targetCp) {
+                    const numPts = this.world.trackPoints.length;
+                    const idxDiff = Math.min(
+                        Math.abs(trackInfo.index - targetCp.index),
+                        numPts - Math.abs(trackInfo.index - targetCp.index)
+                    );
+                    if (idxDiff <= 10) {
+                        const diffObj = window.FH6_DATA.difficulties[this.selectedDifficultyIndex];
+                        this.checkpointTimeLeft += diffObj.checkpointBonusSec;
+                        this.nextCheckpointIdx = (this.nextCheckpointIdx + 1) % this.world.checkpoints.length;
+                        window.horizonAudio.playCheckpointSound();
+                    }
                 }
                 if (this.checkpointTimeLeft <= 0) {
-                    this.finishRace(false, '¡Tiempo Agotado en el Checkpoint!');
+                    this.finishRace(false, '⏱️ ¡TIEMPO AGOTADO EN EL CHECKPOINT!');
+                    return;
                 }
             }
         }
@@ -734,7 +789,7 @@ class HorizonGameEngine {
         const inGearProgress = Math.max(0, Math.min(1, (this.speedKmh - gearMin) / Math.max(1, gearMax - gearMin)));
         this.rpm = Math.round(1100 + inGearProgress * (phys.redlineRpm - 1100));
 
-        // Puntos de Habilidad / Drift
+        // Puntos de Habilidad / Drift + Partículas de Humo de Neumáticos
         const targetDriftAngle = THREE.MathUtils.clamp(-vLateral * 0.032, -0.42, 0.42);
         this.visualDriftAngle = THREE.MathUtils.lerp(this.visualDriftAngle, targetDriftAngle, dt * 8);
 
@@ -742,6 +797,12 @@ class HorizonGameEngine {
             this.currentDriftChain += Math.round((this.speedKmh * 1.8 + Math.abs(vLateral) * 25) * dt);
             this.driftMultiplier = Math.min(5.0, +(1.0 + Math.floor(this.currentDriftChain / 800) * 0.5).toFixed(1));
             this.driftTimer = 1.8;
+
+            this.smokeAccum += dt;
+            if (this.smokeAccum >= 0.045) {
+                this.smokeAccum = 0;
+                this.world.spawnTireSmoke(this.carPos, newRight, this.currentCarConfig.dimensions.width);
+            }
         } else if (this.driftTimer > 0) {
             this.driftTimer -= dt;
             if (this.driftTimer <= 0 && this.currentDriftChain > 0) {
@@ -751,10 +812,37 @@ class HorizonGameEngine {
             }
         }
 
-        // Actualizar transformación del modelo 3D (incluyendo vibración al pisar los Pianos 3D)
-        this.playerCarMesh.position.set(this.carPos.x, this.carPos.y + curbVibrationY, this.carPos.z);
-        this.playerCarMesh.rotation.y = this.carHeading + this.visualDriftAngle;
-        this.playerCarMesh.rotation.z = -this.input.steer * 0.035 * speedFactor + curbRollZ;
+        // Dinámica de Suspensión de 4 Ruedas (Cabeceo / Pitch, Balanceo / Roll y Compresión Vertical / Heave)
+        const safeDt = Math.max(0.004, dt);
+        const longAccel = THREE.MathUtils.clamp((vForward - this.prevForwardSpeed) / safeDt, -38, 38);
+        this.prevForwardSpeed = vForward;
+
+        // Cabeceo: al acelerar el morro sube ligeramente (-X en este sistema donde +Z es adelante), al frenar se hunde (+X)
+        const targetPitch = THREE.MathUtils.clamp(-longAccel * 0.0014, -0.042, 0.048);
+        this.suspPitch = THREE.MathUtils.lerp(this.suspPitch, targetPitch, Math.min(1, dt * 10));
+
+        // Balanceo lateral en curva + vibración sobre pianos 3D
+        const targetRoll = THREE.MathUtils.clamp(-this.input.steer * 0.042 * speedFactor + vLateral * 0.0025, -0.065, 0.065) + curbRollZ;
+        this.suspRoll = THREE.MathUtils.lerp(this.suspRoll, targetRoll, Math.min(1, dt * 12));
+
+        // Resorte-amortiguador vertical (Heave)
+        const curbImpulse = curbVibrationY * 18.0;
+        const springForce = -135.0 * this.suspHeave - 15.5 * this.suspHeaveVel + curbImpulse;
+        this.suspHeaveVel += springForce * dt;
+        this.suspHeave = THREE.MathUtils.clamp(this.suspHeave + this.suspHeaveVel * dt, -0.06, 0.06);
+
+        // Actualizar transformación del modelo 3D y sub-jerarquía del chasis suspendido
+        this.playerCarMesh.position.set(this.carPos.x, this.carPos.y, this.carPos.z);
+        this.playerCarMesh.rotation.set(0, this.carHeading + this.visualDriftAngle, 0);
+
+        const chassisGroup = this.playerCarMesh.userData.chassisGroup;
+        if (chassisGroup) {
+            chassisGroup.position.y = this.suspHeave + curbVibrationY * 0.5;
+            chassisGroup.rotation.x = this.suspPitch;
+            chassisGroup.rotation.z = this.suspRoll;
+        } else {
+            this.playerCarMesh.rotation.z = this.suspRoll;
+        }
 
         const wheels = this.playerCarMesh.userData.wheels;
         if (wheels && wheels.length === 4) {
@@ -774,7 +862,7 @@ class HorizonGameEngine {
 
         this.updateCamera(dt);
 
-        // Distancia a la patrulla policial más cercana para modular la sirena
+        // Distancia a la patrulla policial más cercana y lógica del modo Persecución Policial Nocturna
         let minCopDist = null;
         if (this.world.policeCars.length > 0) {
             minCopDist = Infinity;
@@ -782,6 +870,22 @@ class HorizonGameEngine {
                 const d = this.carPos.distanceTo(cop.pos);
                 if (d < minCopDist) minCopDist = d;
             });
+
+            const modeObj = window.FH6_DATA.gameModes[this.selectedGameModeIndex];
+            if (modeObj && modeObj.id === 'police_pursuit') {
+                // Si una patrulla acorrala al jugador a baja velocidad, sube el medidor de arresto
+                if (minCopDist < 11.5 && this.speedKmh < 55) {
+                    const proximityFactor = 1.0 + (11.5 - minCopDist) * 0.12;
+                    this.policeBustProgress = Math.min(100, this.policeBustProgress + 34.0 * proximityFactor * dt);
+                } else if (minCopDist > 16.0 || this.speedKmh > 85) {
+                    this.policeBustProgress = Math.max(0, this.policeBustProgress - 15.0 * dt);
+                }
+
+                if (this.policeBustProgress >= 100) {
+                    this.finishRace(false, '🚨 ¡ARRESTADO POR LA POLICÍA DE TOKIO!');
+                    return;
+                }
+            }
         }
 
         window.horizonAudio.updateEngine(
@@ -796,10 +900,15 @@ class HorizonGameEngine {
     }
 
     calculateRacePosition() {
-        const playerTotalScore = (this.lapCount - 1) + (this.passedHalfway ? this.playerProgressT : (this.playerProgressT > 0.8 ? this.playerProgressT - 1.0 : this.playerProgressT));
+        let lapFraction = this.playerProgressT;
+        if (this.lapCount === 1 && !this.crossedStartLine && this.playerProgressT > 0.75) {
+            lapFraction = this.playerProgressT - 1.0;
+        }
+        this.playerTotalProgress = (this.lapCount - 1) + lapFraction;
+
         let rank = 1;
         this.world.aiCars.forEach(ai => {
-            if (ai.progressT > playerTotalScore) {
+            if (ai.progressT > this.playerTotalProgress) {
                 rank++;
             }
         });
@@ -808,7 +917,7 @@ class HorizonGameEngine {
 
     finishRace(completedAllLaps = true, customReason = '') {
         this.raceState = 'finished';
-        const totalRaceMs = performance.now() - this.raceStartTime;
+        const totalRaceMs = Math.max(100, performance.now() - this.raceStartTime);
 
         const modal = document.getElementById('finish-race-modal');
         const titleEl = document.getElementById('finish-title');
@@ -816,8 +925,51 @@ class HorizonGameEngine {
         const timeEl = document.getElementById('finish-total-time');
         const bestLapEl = document.getElementById('finish-best-lap');
         const driftEl = document.getElementById('finish-drift-score');
+        const standingsBody = document.getElementById('finish-standings-body');
 
         if (modal) modal.classList.remove('hidden');
+
+        // Construir tabla oficial de clasificación de los 7 competidores
+        const entries = [];
+        entries.push({
+            isPlayer: true,
+            name: `TÚ (${this.currentCarConfig ? this.currentCarConfig.name : 'Piloto'})`,
+            progress: completedAllLaps ? (this.maxLaps + 0.001) : this.playerTotalProgress,
+            timeMs: totalRaceMs,
+            statusText: completedAllLaps ? this.formatTimeMs(totalRaceMs) : 'DNF'
+        });
+
+        this.world.aiCars.forEach((ai) => {
+            let aiTimeMs = ai.finishTimeMs;
+            if (!aiTimeMs) {
+                const progressRatio = Math.max(0.25, ai.progressT / Math.max(0.5, this.maxLaps));
+                aiTimeMs = totalRaceMs / progressRatio;
+            }
+            entries.push({
+                isPlayer: false,
+                name: `${ai.name} (${ai.classRating || 'S1'})`,
+                progress: ai.finished ? (this.maxLaps + (totalRaceMs - aiTimeMs) * 0.00001) : ai.progressT,
+                timeMs: aiTimeMs,
+                statusText: this.formatTimeMs(aiTimeMs)
+            });
+        });
+
+        entries.sort((a, b) => b.progress - a.progress);
+
+        const playerRankIndex = entries.findIndex(e => e.isPlayer);
+        if (playerRankIndex !== -1) {
+            this.playerPositionRank = playerRankIndex + 1;
+        }
+
+        if (standingsBody) {
+            standingsBody.innerHTML = entries.map((entry, idx) => `
+                <tr class="${entry.isPlayer ? 'is-player' : ''}">
+                    <td>${idx + 1}º</td>
+                    <td>${entry.name}</td>
+                    <td>${entry.statusText}</td>
+                </tr>
+            `).join('');
+        }
 
         if (titleEl) {
             if (!completedAllLaps) {
@@ -839,6 +991,32 @@ class HorizonGameEngine {
     hideFinishModal() {
         const modal = document.getElementById('finish-race-modal');
         if (modal) modal.classList.add('hidden');
+    }
+
+    hidePauseModal() {
+        const modal = document.getElementById('pause-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    togglePauseRace(forcePause) {
+        const modal = document.getElementById('pause-modal');
+        if (this.raceState !== 'racing' && this.raceState !== 'paused') return;
+
+        const wantPause = typeof forcePause === 'boolean' ? forcePause : (this.raceState === 'racing');
+        if (wantPause && this.raceState === 'racing') {
+            this.raceState = 'paused';
+            this.pauseStartedAt = performance.now();
+            if (modal) modal.classList.remove('hidden');
+            if (this.currentCarConfig) {
+                window.horizonAudio.updateEngine(1050, this.currentCarConfig.physics.redlineRpm, false, false, this.currentCarConfig.physics.engineBaseFreq, true, null);
+            }
+        } else if (!wantPause && this.raceState === 'paused') {
+            const pausedDuration = Math.max(0, performance.now() - this.pauseStartedAt);
+            this.raceStartTime += pausedDuration;
+            this.lapStartTime += pausedDuration;
+            this.raceState = 'racing';
+            if (modal) modal.classList.add('hidden');
+        }
     }
 
     updateCamera(dt) {
@@ -922,10 +1100,16 @@ class HorizonGameEngine {
         const lapNumEl = document.getElementById('hud-lap-num');
         const posEl = document.getElementById('hud-race-pos');
         const cpTimerPill = document.getElementById('hud-cp-timer');
+        const policeHeatPill = document.getElementById('hud-police-heat');
 
         if (lapTimeEl) {
-            const elapsed = this.raceState === 'racing' ? (performance.now() - this.lapStartTime) : 0;
-            lapTimeEl.textContent = this.formatTimeMs(elapsed);
+            let elapsed = 0;
+            if (this.raceState === 'racing') {
+                elapsed = performance.now() - this.lapStartTime;
+            } else if (this.raceState === 'paused') {
+                elapsed = this.pauseStartedAt - this.lapStartTime;
+            }
+            lapTimeEl.textContent = this.formatTimeMs(Math.max(0, elapsed));
         }
         if (lapNumEl) {
             lapNumEl.textContent = `VUELTA ${this.lapCount} / ${this.maxLaps}`;
@@ -933,13 +1117,21 @@ class HorizonGameEngine {
         if (posEl) {
             posEl.textContent = `POS ${this.playerPositionRank} / 7`;
         }
+        const modeObj = window.FH6_DATA.gameModes[this.selectedGameModeIndex];
         if (cpTimerPill) {
-            const modeObj = window.FH6_DATA.gameModes[this.selectedGameModeIndex];
-            if (modeObj.id === 'checkpoint_time') {
+            if (modeObj && modeObj.id === 'checkpoint_time') {
                 cpTimerPill.classList.remove('hidden');
                 cpTimerPill.textContent = `⏱️ CHECKPOINT: ${this.checkpointTimeLeft.toFixed(1)}s`;
             } else {
                 cpTimerPill.classList.add('hidden');
+            }
+        }
+        if (policeHeatPill) {
+            if (modeObj && modeObj.id === 'police_pursuit') {
+                policeHeatPill.classList.remove('hidden');
+                policeHeatPill.textContent = `🚨 PERSECUCIÓN • ARRESTO: ${Math.round(this.policeBustProgress)}%`;
+            } else {
+                policeHeatPill.classList.add('hidden');
             }
         }
 
@@ -1025,6 +1217,7 @@ class HorizonGameEngine {
         const shouldOpen = typeof forceState === 'boolean' ? forceState : modal.classList.contains('hidden');
         modal.classList.toggle('hidden', !shouldOpen);
         if (shouldOpen) {
+            this.hidePauseModal();
             this.raceState = 'garage';
         }
     }
@@ -1243,6 +1436,29 @@ class HorizonGameEngine {
             resetBtn.addEventListener('click', () => this.startNewRace());
         }
 
+        const pauseHudBtn = document.getElementById('btn-pause-race');
+        if (pauseHudBtn) {
+            pauseHudBtn.addEventListener('click', () => this.togglePauseRace());
+        }
+
+        const resumeRaceBtn = document.getElementById('btn-resume-race');
+        if (resumeRaceBtn) {
+            resumeRaceBtn.addEventListener('click', () => this.togglePauseRace(false));
+        }
+
+        const pauseRestartBtn = document.getElementById('btn-pause-restart');
+        if (pauseRestartBtn) {
+            pauseRestartBtn.addEventListener('click', () => this.startNewRace());
+        }
+
+        const pauseGarageBtn = document.getElementById('btn-pause-garage');
+        if (pauseGarageBtn) {
+            pauseGarageBtn.addEventListener('click', () => {
+                this.hidePauseModal();
+                this.toggleGarageModal(true);
+            });
+        }
+
         const touchToggleBtn = document.getElementById('btn-toggle-touch');
         if (touchToggleBtn) {
             touchToggleBtn.addEventListener('click', () => {
@@ -1275,7 +1491,10 @@ class HorizonGameEngine {
         }
 
         this.updatePhysics(dt);
-        this.world.updateDynamicElements(dt, this.raceState === 'racing', this.carPos);
+        if (this.raceState !== 'paused') {
+            const raceElapsedMs = this.raceState === 'racing' ? Math.max(0, performance.now() - this.raceStartTime) : 0;
+            this.world.updateDynamicElements(dt, this.raceState === 'racing', this.carPos, this.playerTotalProgress, raceElapsedMs);
+        }
         this.updateHUD();
 
         this.renderer.render(this.scene, this.camera);
