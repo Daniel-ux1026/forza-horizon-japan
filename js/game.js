@@ -24,6 +24,9 @@ class HorizonGameEngine {
         this.carPos = new THREE.Vector3(0, 0, 0);
         this.carVel = new THREE.Vector3(0, 0, 0);
         this.carHeading = 0;
+        this.smoothedSteer = 0;
+        this.camHeading = 0;
+        this.camHeightY = 0;
         this.visualDriftAngle = 0;
         this.speedKmh = 0;
         this.prevForwardSpeed = 0;
@@ -238,8 +241,12 @@ class HorizonGameEngine {
         const tangent = new THREE.Vector3().subVectors(p1, p0).normalize();
 
         this.carPos.copy(p0);
+        this.carPos.y += 0.08;
         this.carVel.set(0, 0, 0);
         this.carHeading = Math.atan2(tangent.x, tangent.z);
+        this.smoothedSteer = 0;
+        this.camHeading = this.carHeading;
+        this.camHeightY = this.carPos.y;
         this.visualDriftAngle = 0;
         this.speedKmh = 0;
         this.prevForwardSpeed = 0;
@@ -661,13 +668,26 @@ class HorizonGameEngine {
             this.carVel.multiplyScalar(effectiveMaxMs / currentSpeedMs);
         }
 
-        // Giro Simcade y Derrape
-        const speedFactor = Math.min(1.0, currentSpeedMs / 8.5);
-        const reverseSign = forwardSpeed >= -0.5 ? 1 : -1;
-        const turnRate = phys.turnSpeed * tuning.handlingMult * this.input.steer * speedFactor * reverseSign;
+        // Dirección Progresiva y Precisa (Simcade Ajustado)
+        // Suavizado exponencial independiente de FPS: entrada rápida y autocentrado inmediato al soltar la tecla
+        const steerResponse = Math.abs(this.input.steer) > Math.abs(this.smoothedSteer) ? 16.0 : 24.0;
+        this.smoothedSteer = THREE.MathUtils.lerp(
+            this.smoothedSteer,
+            this.input.steer,
+            1.0 - Math.exp(-dt * steerResponse)
+        );
+        if (Math.abs(this.smoothedSteer) < 0.002 && this.input.steer === 0) {
+            this.smoothedSteer = 0;
+        }
 
-        if (this.input.handbrake && currentSpeedMs > 12) {
-            this.carHeading += turnRate * 1.34 * dt;
+        const speedFactor = Math.min(1.0, currentSpeedMs / 6.5);
+        // Dirección sensible a la velocidad: firme y estable en rectas de alta velocidad, ágil en curvas técnicas
+        const highSpeedStability = 1.0 - Math.min(0.38, (currentSpeedMs / Math.max(40, maxSpeedMs)) * 0.38);
+        const reverseSign = forwardSpeed >= -0.5 ? 1 : -1;
+        const turnRate = phys.turnSpeed * tuning.handlingMult * this.smoothedSteer * speedFactor * highSpeedStability * reverseSign;
+
+        if (this.input.handbrake && currentSpeedMs > 10) {
+            this.carHeading += turnRate * 1.32 * dt;
         } else {
             this.carHeading += turnRate * dt;
         }
@@ -678,29 +698,35 @@ class HorizonGameEngine {
         const vForward = this.carVel.dot(newForward);
         const vLateral = this.carVel.dot(newRight);
 
-        const isDrifting = (this.input.handbrake && currentSpeedMs > 12) || (Math.abs(vLateral) > 5.0 && currentSpeedMs > 18);
-        const gripCoeff = isDrifting ? Math.max(0.65, phys.gripDrift - tuning.driftBonus) : phys.gripNormal;
-        const dampedLateral = vLateral * Math.pow(1.0 - gripCoeff, dt * 10);
+        // Agarre lateral quirúrgico en conducción normal vs derrape controlado con Freno de Mano
+        const isDrifting = (this.input.handbrake && currentSpeedMs > 10) || (Math.abs(vLateral) > 7.5 && currentSpeedMs > 24);
+        const lateralDecayRate = isDrifting
+            ? Math.max(2.6, (1.0 - Math.max(0.55, phys.gripDrift - tuning.driftBonus)) * 11.0)
+            : (18.5 + phys.gripNormal * 8.0);
+        const dampedLateral = vLateral * Math.exp(-lateralDecayRate * dt);
 
-        this.carVel.copy(newForward).multiplyScalar(vForward).addScaledVector(newRight, dampedLateral);
+        // En giro de agarre limpio, conservar ligeramente más empuje longitudinal para trazadas precisas
+        const cornerForwardRetention = isDrifting ? 1.0 : (1.0 - Math.min(0.03, Math.abs(this.smoothedSteer) * 0.015 * dt));
+        this.carVel.copy(newForward).multiplyScalar(vForward * cornerForwardRetention).addScaledVector(newRight, dampedLateral);
         this.carPos.addScaledVector(this.carVel, dt);
 
         // Resolver colisiones reales con los 6 competidores y patrullas
         this.resolveVehicleCollisions(dt);
 
-        // Mantener dentro de los límites de la pista y calcular vuelta / progreso
+        // Mantener dentro de los límites de la pista y calcular vuelta / progreso (con interpolación continua de segmento)
         const trackInfo = this.world.getClosestTrackInfo(this.carPos);
         let curbVibrationY = 0;
         let curbRollZ = 0;
         if (trackInfo) {
-            this.carPos.y = THREE.MathUtils.lerp(this.carPos.y, trackInfo.point.y + 0.08, 0.38);
+            const targetGroundY = trackInfo.point.y + 0.08;
+            this.carPos.y = THREE.MathUtils.lerp(this.carPos.y, targetGroundY, 1.0 - Math.exp(-dt * 28.0));
 
             // Vibración física y visual al pisar los Pianos 3D (Rumble Strips)
             const absLat = Math.abs(trackInfo.lateralOffset);
             if (absLat > this.world.roadWidth * 0.40 && currentSpeedMs > 5) {
-                const freq = performance.now() * 0.055;
-                curbVibrationY = Math.sin(freq) * 0.045 * Math.min(1, currentSpeedMs / 35);
-                curbRollZ = Math.cos(freq) * 0.022 * Math.sign(trackInfo.lateralOffset);
+                const freq = performance.now() * 0.045;
+                curbVibrationY = Math.sin(freq) * 0.024 * Math.min(1, currentSpeedMs / 35);
+                curbRollZ = Math.cos(freq) * 0.015 * Math.sign(trackInfo.lateralOffset);
             }
 
             const maxOffset = this.world.roadWidth * 0.46;
@@ -708,7 +734,12 @@ class HorizonGameEngine {
                 const sign = Math.sign(trackInfo.lateralOffset);
                 const correction = Math.abs(trackInfo.lateralOffset) - maxOffset;
                 this.carPos.addScaledVector(trackInfo.right, -sign * correction);
-                this.carVel.multiplyScalar(0.95);
+                // Eliminar componente de velocidad hacia afuera del muro para deslizar suavemente sin rebotar
+                const outwardVel = this.carVel.dot(trackInfo.right) * sign;
+                if (outwardVel > 0) {
+                    this.carVel.addScaledVector(trackInfo.right, -sign * outwardVel * 0.92);
+                }
+                this.carVel.multiplyScalar(Math.max(0.92, 1.0 - 1.5 * dt));
             }
 
             this.playerProgressT = trackInfo.progressT;
@@ -790,8 +821,14 @@ class HorizonGameEngine {
         this.rpm = Math.round(1100 + inGearProgress * (phys.redlineRpm - 1100));
 
         // Puntos de Habilidad / Drift + Partículas de Humo de Neumáticos
-        const targetDriftAngle = THREE.MathUtils.clamp(-vLateral * 0.032, -0.42, 0.42);
-        this.visualDriftAngle = THREE.MathUtils.lerp(this.visualDriftAngle, targetDriftAngle, dt * 8);
+        const targetDriftAngle = isDrifting
+            ? THREE.MathUtils.clamp(-dampedLateral * 0.028, -0.34, 0.34)
+            : THREE.MathUtils.clamp(-dampedLateral * 0.008, -0.025, 0.025);
+        this.visualDriftAngle = THREE.MathUtils.lerp(
+            this.visualDriftAngle,
+            targetDriftAngle,
+            1.0 - Math.exp(-dt * 14.0)
+        );
 
         if (isDrifting && this.speedKmh > 45) {
             this.currentDriftChain += Math.round((this.speedKmh * 1.8 + Math.abs(vLateral) * 25) * dt);
@@ -822,14 +859,14 @@ class HorizonGameEngine {
         this.suspPitch = THREE.MathUtils.lerp(this.suspPitch, targetPitch, Math.min(1, dt * 10));
 
         // Balanceo lateral en curva + vibración sobre pianos 3D
-        const targetRoll = THREE.MathUtils.clamp(-this.input.steer * 0.042 * speedFactor + vLateral * 0.0025, -0.065, 0.065) + curbRollZ;
-        this.suspRoll = THREE.MathUtils.lerp(this.suspRoll, targetRoll, Math.min(1, dt * 12));
+        const targetRoll = THREE.MathUtils.clamp(-this.smoothedSteer * 0.036 * speedFactor + dampedLateral * 0.002, -0.055, 0.055) + curbRollZ;
+        this.suspRoll = THREE.MathUtils.lerp(this.suspRoll, targetRoll, 1.0 - Math.exp(-dt * 14.0));
 
         // Resorte-amortiguador vertical (Heave)
-        const curbImpulse = curbVibrationY * 18.0;
-        const springForce = -135.0 * this.suspHeave - 15.5 * this.suspHeaveVel + curbImpulse;
+        const curbImpulse = curbVibrationY * 14.0;
+        const springForce = -145.0 * this.suspHeave - 18.5 * this.suspHeaveVel + curbImpulse;
         this.suspHeaveVel += springForce * dt;
-        this.suspHeave = THREE.MathUtils.clamp(this.suspHeave + this.suspHeaveVel * dt, -0.06, 0.06);
+        this.suspHeave = THREE.MathUtils.clamp(this.suspHeave + this.suspHeaveVel * dt, -0.045, 0.045);
 
         // Actualizar transformación del modelo 3D y sub-jerarquía del chasis suspendido
         this.playerCarMesh.position.set(this.carPos.x, this.carPos.y, this.carPos.z);
@@ -837,7 +874,7 @@ class HorizonGameEngine {
 
         const chassisGroup = this.playerCarMesh.userData.chassisGroup;
         if (chassisGroup) {
-            chassisGroup.position.y = this.suspHeave + curbVibrationY * 0.5;
+            chassisGroup.position.y = this.suspHeave + curbVibrationY * 0.35;
             chassisGroup.rotation.x = this.suspPitch;
             chassisGroup.rotation.z = this.suspRoll;
         } else {
@@ -849,7 +886,7 @@ class HorizonGameEngine {
             wheels.forEach((w, idx) => {
                 w.children.forEach(c => { c.rotation.x += currentSpeedMs * dt * 2.2; });
                 if (idx < 2) {
-                    w.rotation.y = this.input.steer * 0.38;
+                    w.rotation.y = this.smoothedSteer * 0.38;
                 }
             });
         }
@@ -1022,42 +1059,59 @@ class HorizonGameEngine {
     updateCamera(dt) {
         if (!this.playerCarMesh) return;
 
-        const heading = this.carHeading;
-        const forward = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+        const safeDt = Math.max(0.001, Math.min(0.05, dt));
+
+        // Seguimiento angular y vertical en el marco de referencia del vehículo (cero jitter longitudinal por variación de dt)
+        let angleDiff = this.carHeading - this.camHeading;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+        const yawAlpha = 1.0 - Math.exp(-safeDt * 14.0);
+        this.camHeading += angleDiff * yawAlpha;
+
+        const heightAlpha = 1.0 - Math.exp(-safeDt * 22.0);
+        this.camHeightY = THREE.MathUtils.lerp(this.camHeightY, this.carPos.y, heightAlpha);
+
+        const carForward = new THREE.Vector3(Math.sin(this.carHeading), 0, Math.cos(this.carHeading));
+        const camForward = new THREE.Vector3(Math.sin(this.camHeading), 0, Math.cos(this.camHeading));
 
         if (this.cameraMode === 2) {
-            const hoodPos = new THREE.Vector3().copy(this.carPos)
-                .add(new THREE.Vector3(0, 1.38, 0))
-                .addScaledVector(forward, 0.65);
+            const hoodPos = new THREE.Vector3(this.carPos.x, this.camHeightY + 1.38, this.carPos.z)
+                .addScaledVector(carForward, 0.65);
             this.camera.position.copy(hoodPos);
-            const lookTarget = new THREE.Vector3().copy(hoodPos).addScaledVector(forward, 35);
+            const lookTarget = new THREE.Vector3().copy(hoodPos).addScaledVector(carForward, 35);
             this.camera.lookAt(lookTarget);
         } else {
             const distBack = this.cameraMode === 0 ? 6.6 : 9.0;
             const heightUp = this.cameraMode === 0 ? 2.55 : 3.5;
 
-            const desiredCamPos = new THREE.Vector3().copy(this.carPos)
-                .addScaledVector(forward, -distBack)
-                .add(new THREE.Vector3(0, heightUp, 0));
+            // Posición anclada a distancia exacta detrás del chasis usando el ángulo suavizado camHeading
+            this.camera.position.set(
+                this.carPos.x - camForward.x * distBack,
+                this.camHeightY + heightUp,
+                this.carPos.z - camForward.z * distBack
+            );
 
-            this.camera.position.lerp(desiredCamPos, Math.min(1, dt * 11));
-
-            // Sacudida de cámara en colisiones reales
+            // Sacudida de cámara suave solo en impactos fuertes
             if (this.cameraShake > 0.01) {
-                this.camera.position.x += (Math.random() - 0.5) * this.cameraShake;
-                this.camera.position.y += (Math.random() - 0.5) * this.cameraShake;
-                this.cameraShake = Math.max(0, this.cameraShake - dt * 2.4);
+                const shakePhase = performance.now() * 0.045;
+                this.camera.position.x += Math.sin(shakePhase) * this.cameraShake * 0.35;
+                this.camera.position.y += Math.cos(shakePhase * 1.3) * this.cameraShake * 0.25;
+                this.cameraShake = Math.max(0, this.cameraShake - safeDt * 3.2);
             }
 
-            const lookAtPos = new THREE.Vector3().copy(this.carPos)
-                .addScaledVector(forward, 5.5)
-                .add(new THREE.Vector3(0, 1.0, 0));
+            const lookAtPos = new THREE.Vector3(
+                this.carPos.x + carForward.x * 5.5,
+                this.camHeightY + 1.0,
+                this.carPos.z + carForward.z * 5.5
+            );
             this.camera.lookAt(lookAtPos);
         }
 
-        const targetFov = 60 + Math.min(20, (this.speedKmh / 340) * 18);
-        if (Math.abs(this.camera.fov - targetFov) > 0.2) {
-            this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, dt * 5);
+        const targetFov = 60 + Math.min(16, (this.speedKmh / 340) * 15);
+        const fovAlpha = 1.0 - Math.exp(-safeDt * 8.0);
+        this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, fovAlpha);
+        if (Math.abs(this.camera.fov - targetFov) > 0.005) {
             this.camera.updateProjectionMatrix();
         }
     }

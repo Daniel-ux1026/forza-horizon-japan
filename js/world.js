@@ -2384,11 +2384,15 @@ class HorizonWorldBuilder {
 
             const p0 = this.trackPoints[idx0];
             const p1 = this.trackPoints[idx1];
+            const p2 = this.trackPoints[(idx1 + 1) % numPts];
             const centerPos = new THREE.Vector3().lerpVectors(p0, p1, frac);
-            const tangent = new THREE.Vector3().subVectors(p1, p0).normalize();
+            const tan0 = new THREE.Vector3().subVectors(p1, p0).normalize();
+            const tan1 = new THREE.Vector3().subVectors(p2, p1).normalize();
+            const tangent = new THREE.Vector3().lerpVectors(tan0, tan1, frac).normalize();
             const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
 
             ai.pos.copy(centerPos).addScaledVector(right, ai.laneOffset);
+            ai.pos.y = centerPos.y + 0.08;
             ai.heading = Math.atan2(tangent.x, tangent.z);
             ai.vel.copy(tangent).multiplyScalar(ai.currentSpeedMs);
 
@@ -2399,8 +2403,8 @@ class HorizonWorldBuilder {
             if (ai.mesh.userData.chassisGroup) {
                 ai.mesh.userData.chassisGroup.rotation.z = THREE.MathUtils.lerp(
                     ai.mesh.userData.chassisGroup.rotation.z,
-                    (this.trackCurvatures[idx0] || 0) * 1.6,
-                    dt * 6
+                    (this.trackCurvatures[idx0] || 0) * 1.4,
+                    Math.min(1, dt * 8)
                 );
             }
 
@@ -2412,13 +2416,19 @@ class HorizonWorldBuilder {
         });
     }
 
+    /**
+     * Proyección continua sub-segmento sobre la spline del circuito.
+     * Evita saltos discretos ("escalones" de altura o tangente) entre los 360 nodos,
+     * eliminando por completo el temblor de cámara al avanzar.
+     */
     getClosestTrackInfo(position) {
-        if (!this.trackPoints.length) return null;
+        const numPts = this.trackPoints.length;
+        if (!numPts) return null;
 
         let bestIdx = 0;
         let minDistSq = Infinity;
 
-        for (let i = 0; i < this.trackPoints.length; i++) {
+        for (let i = 0; i < numPts; i++) {
             const pt = this.trackPoints[i];
             const dx = position.x - pt.x;
             const dz = position.z - pt.z;
@@ -2429,20 +2439,49 @@ class HorizonWorldBuilder {
             }
         }
 
-        const nextIdx = (bestIdx + 1) % this.trackPoints.length;
-        const p0 = this.trackPoints[bestIdx];
-        const p1 = this.trackPoints[nextIdx];
-        const tangent = new THREE.Vector3().subVectors(p1, p0).normalize();
+        // Evaluar proyección continua en el segmento anterior [prevIdx -> bestIdx] y siguiente [bestIdx -> nextIdx]
+        const prevIdx = (bestIdx - 1 + numPts) % numPts;
+        const nextIdx = (bestIdx + 1) % numPts;
+
+        const projectOnSegment = (idxA, idxB) => {
+            const a = this.trackPoints[idxA];
+            const b = this.trackPoints[idxB];
+            const abx = b.x - a.x;
+            const abz = b.z - a.z;
+            const lenSq = Math.max(0.0001, abx * abx + abz * abz);
+            const apx = position.x - a.x;
+            const apz = position.z - a.z;
+            const t = THREE.MathUtils.clamp((apx * abx + apz * abz) / lenSq, 0, 1);
+            const px = a.x + abx * t;
+            const pz = a.z + abz * t;
+            const dSq = (position.x - px) * (position.x - px) + (position.z - pz) * (position.z - pz);
+            return { idxA, idxB, t, dSq };
+        };
+
+        const segPrev = projectOnSegment(prevIdx, bestIdx);
+        const segNext = projectOnSegment(bestIdx, nextIdx);
+        const chosen = segPrev.dSq < segNext.dSq ? segPrev : segNext;
+
+        const pA = this.trackPoints[chosen.idxA];
+        const pB = this.trackPoints[chosen.idxB];
+        const pC = this.trackPoints[(chosen.idxB + 1) % numPts];
+
+        const interpPoint = new THREE.Vector3().lerpVectors(pA, pB, chosen.t);
+
+        const tanA = new THREE.Vector3().subVectors(pB, pA).normalize();
+        const tanB = new THREE.Vector3().subVectors(pC, pB).normalize();
+        const tangent = new THREE.Vector3().lerpVectors(tanA, tanB, chosen.t).normalize();
         const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
-        const toCar = new THREE.Vector3().subVectors(position, p0);
+
+        const toCar = new THREE.Vector3().subVectors(position, interpPoint);
         const lateralOffset = toCar.dot(right);
 
         return {
-            point: p0,
+            point: interpPoint,
             tangent,
             right,
             lateralOffset,
-            progressT: bestIdx / this.trackPoints.length,
+            progressT: (chosen.idxA + chosen.t) / numPts,
             index: bestIdx
         };
     }

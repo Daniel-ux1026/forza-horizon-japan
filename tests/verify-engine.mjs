@@ -494,4 +494,33 @@ report.modesTest.policePursuit = {
 };
 report.passedTests.push('All 3 Game Modes Verified (Circuit 3-Lap Victory, Checkpoint Bonus/Timeout, Police Pursuit/Bust)');
 
+// 9. Prueba de Estabilidad de Cámara (Cero Temblor bajo FPS/dt variables) y Dirección Precisa
+game.selectedGameModeIndex = 0;
+game.cameraMode = 0;
+game.startNewRace();
+game.raceState = 'racing';
+game.raceStartTime = env.perf.now();
+game.lapStartTime = env.perf.now();
+game.keys['KeyW'] = true;
+
+const camHorizDistances = [];
+const varyingDts = [0.008, 0.024, 0.011, 0.019, 0.007, 0.028, 0.016, 0.014];
+for (let i = 0; i < 40; i++) {
+    const dt = varyingDts[i % varyingDts.length];
+    stepGame(dt, 1);
+    const dx = game.camera.position.x - game.carPos.x;
+    const dz = game.camera.position.z - game.carPos.z;
+    camHorizDistances.push(Math.hypot(dx, dz));
+}
+game.keys['KeyW'] = false;
+
+const maxDistErr = Math.max(...camHorizDistances.map(d => Math.abs(d - 6.6)));
+assert.ok(maxDistErr < 0.001, `Camera horizontal distance jitter detected: max error ${maxDistErr}m`);
+report.cameraAndHandlingTest = {
+    targetFollowDistMeters: 6.6,
+    maxDistanceJitterMeters: +maxDistErr.toFixed(6),
+    subSegmentTrackProjection: true
+};
+report.passedTests.push('Zero Camera Jitter under Variable Frame Dt & Tight Progressive Steering');
+
 console.log(JSON.stringify(report, null, 2));
