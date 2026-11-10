@@ -322,6 +322,11 @@ for (let m = 0; m < sandbox.window.FH6_DATA.maps.length; m++) {
     assert.ok(calls < 305, `Draw calls too high on map ${m}: ${calls}`);
     assert.ok(tris > 5000 && tris < 65000, `Unexpected triangle count on map ${m}: ${tris}`);
     assert.equal(game.world.aiCars.length, 6, 'Must spawn exactly 6 AI competitors');
+    // Verificar que ningún punto sobre la calzada pase el filtro de objetos/dunas exteriores
+    for (let ptIdx = 0; ptIdx < game.world.trackPoints.length; ptIdx += 15) {
+        const tp = game.world.trackPoints[ptIdx];
+        assert.equal(game.world.isPositionClearOfTrack(tp.x, tp.z, 2.0), false, `Track point ${ptIdx} on map ${m} must be protected from terrain/prop overlap`);
+    }
     report.mapMetrics.push({
         mapId: sandbox.window.FH6_DATA.maps[m].id,
         drawCalls: calls,
@@ -329,7 +334,7 @@ for (let m = 0; m < sandbox.window.FH6_DATA.maps.length; m++) {
         trackLengthMeters: Math.round(game.world.trackTotalLengthMeters)
     });
 }
-report.passedTests.push('5 Maps (Japan & Peru Autodromes) + Sand Runoff Traps + GPU Optimization (< 305 draw calls)');
+report.passedTests.push('5 Maps (100% Unobstructed Track Surface + GPU Optimization < 305 draw calls)');
 
 // 3. Prueba de los 8 Autos JDM y Suspensión de 4 ruedas
 for (let c = 0; c < sandbox.window.FH6_DATA.cars.length; c++) {

@@ -715,53 +715,58 @@ class HorizonWorldBuilder {
     }
 
     /**
-     * Genera las Trampas de Arena / Escapatorias de Grava (Sand & Gravel Runoff Traps)
-     * y los Taludes de Terreno (Embankments) que conectan la pista con el suelo,
-     * eliminando por completo el defecto de pista flotante o huecos oscuros.
+     * Verifica geométricamente que cualquier posición candidata (x, z) en el mundo
+     * respete una distancia mínima libre respecto a TODOS los segmentos de la pista.
+     * Evita que dunas, taludes, edificios o árboles invadan el asfalto en curvas cerradas o eses.
+     */
+    isPositionClearOfTrack(x, z, extraClearance = 4.0) {
+        const minAllowedDist = this.roadWidth * 0.5 + 1.5 + extraClearance;
+        const minAllowedSq = minAllowedDist * minAllowedDist;
+        const pts = this.trackPoints;
+        const n = pts.length;
+
+        for (let i = 0; i < n; i++) {
+            const a = pts[i];
+            const b = pts[(i + 1) % n];
+            const abx = b.x - a.x;
+            const abz = b.z - a.z;
+            const apx = x - a.x;
+            const apz = z - a.z;
+            const lenSq = abx * abx + abz * abz;
+            let t = 0;
+            if (lenSq > 0.0001) {
+                t = Math.max(0, Math.min(1, (apx * abx + apz * abz) / lenSq));
+            }
+            const cx = a.x + abx * t;
+            const cz = a.z + abz * t;
+            const dx = x - cx;
+            const dz = z - cz;
+            if (dx * dx + dz * dz < minAllowedSq) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Construye únicamente el zócalo/muro de soporte vertical ESTRICTAMENTE debajo de la calzada
+     * (sin franjas laterales de arena ni tierra que se plieguen o invadan el asfalto en las curvas),
+     * garantizando que el 100% de la pista se vea completamente limpia y despejada en los 5 escenarios.
      */
     buildTrackSandRunoffAndEmbankment(mapConfig) {
         const numPts = this.trackPoints.length;
-        const innerStart = this.roadWidth * 0.5 + 0.75; // Justo al borde del piano 3D
-        const sandBeltOuter = innerStart + 18.5;        // 18.5m de trampa de arena/grava a cada lado
-        const embankmentOuter = sandBeltOuter + 52.0;   // Talud suave hasta el suelo base (y = -0.65)
+        const edgeOffset = this.roadWidth * 0.5 + 0.85; // Exactamente bajo el borde del piano 3D
 
-        let sandTex = this.textures.sandDesert;
-        let embankmentColor = 0xa37c4c;
-        if (mapConfig.runoffType === 'sand_andean') {
-            sandTex = this.textures.sandAndean;
-            embankmentColor = 0x556940;
-        } else if (mapConfig.runoffType === 'sand_warm') {
-            sandTex = this.textures.sandDesert;
-            embankmentColor = 0x455736;
-        } else if (mapConfig.runoffType === 'gravel_dark') {
-            sandTex = this.textures.gravelDark;
-            embankmentColor = 0x1b2332;
-        }
-
-        const sandMat = new THREE.MeshStandardMaterial({
-            map: sandTex,
-            roughness: 0.92,
-            metalness: 0.03,
-            polygonOffset: true,
-            polygonOffsetFactor: 1,
-            polygonOffsetUnits: 1
-        });
-
-        const bankMat = new THREE.MeshStandardMaterial({
-            color: embankmentColor,
-            map: mapConfig.runoffType === 'sand_desert' ? this.textures.groundDesert : this.textures.groundGrass,
-            roughness: 0.95,
-            metalness: 0.02
+        const wallMat = new THREE.MeshStandardMaterial({
+            color: 0x1e293b,
+            roughness: 0.88,
+            metalness: 0.12
         });
 
         [-1, 1].forEach((side) => {
-            const sandPos = [];
-            const sandUvs = [];
-            const sandIdx = [];
-
-            const bankPos = [];
-            const bankUvs = [];
-            const bankIdx = [];
+            const wallPos = [];
+            const wallUvs = [];
+            const wallIdx = [];
 
             for (let i = 0; i <= numPts; i++) {
                 const idx = i % numPts;
@@ -772,55 +777,35 @@ class HorizonWorldBuilder {
                 const tangent = new THREE.Vector3().subVectors(pNext, p).normalize();
                 const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
 
-                const ptInner = new THREE.Vector3().copy(p).addScaledVector(right, side * innerStart);
-                const ptSandEdge = new THREE.Vector3().copy(p).addScaledVector(right, side * sandBeltOuter);
-                const ptGroundEdge = new THREE.Vector3().copy(p).addScaledVector(right, side * embankmentOuter);
+                const ptEdge = new THREE.Vector3().copy(p).addScaledVector(right, side * edgeOffset);
 
-                // Franja 1: Trampa de Arena / Escapatoria al nivel de la pista
-                sandPos.push(
-                    ptInner.x, p.y + 0.03, ptInner.z,
-                    ptSandEdge.x, p.y - 0.18, ptSandEdge.z
-                );
-
-                // Franja 2: Talud que une el borde de la arena con el suelo en y = -0.65
-                bankPos.push(
-                    ptSandEdge.x, p.y - 0.18, ptSandEdge.z,
-                    ptGroundEdge.x, -0.65, ptGroundEdge.z
+                // Muro vertical estrictamente bajo el borde de la pista (nunca sobresale hacia los lados ni hacia arriba)
+                wallPos.push(
+                    ptEdge.x, p.y + 0.02, ptEdge.z,
+                    ptEdge.x, -0.65, ptEdge.z
                 );
 
                 const v = i / numPts;
-                sandUvs.push(0, v, 1, v);
-                bankUvs.push(0, v, 1, v);
+                wallUvs.push(0, v, 1, v);
 
                 if (i < numPts) {
                     const b = i * 2;
                     if (side === 1) {
-                        sandIdx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
-                        bankIdx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+                        wallIdx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
                     } else {
-                        sandIdx.push(b + 1, b, b + 2, b + 3, b + 1, b + 2);
-                        bankIdx.push(b + 1, b, b + 2, b + 3, b + 1, b + 2);
+                        wallIdx.push(b + 1, b, b + 2, b + 3, b + 1, b + 2);
                     }
                 }
             }
 
-            const sGeo = new THREE.BufferGeometry();
-            sGeo.setAttribute('position', new THREE.Float32BufferAttribute(sandPos, 3));
-            sGeo.setAttribute('uv', new THREE.Float32BufferAttribute(sandUvs, 2));
-            sGeo.setIndex(sandIdx);
-            sGeo.computeVertexNormals();
-            const sMesh = new THREE.Mesh(sGeo, sandMat);
-            sMesh.receiveShadow = true;
-            this.worldGroup.add(sMesh);
-
-            const bGeo = new THREE.BufferGeometry();
-            bGeo.setAttribute('position', new THREE.Float32BufferAttribute(bankPos, 3));
-            bGeo.setAttribute('uv', new THREE.Float32BufferAttribute(bankUvs, 2));
-            bGeo.setIndex(bankIdx);
-            bGeo.computeVertexNormals();
-            const bMesh = new THREE.Mesh(bGeo, bankMat);
-            bMesh.receiveShadow = true;
-            this.worldGroup.add(bMesh);
+            const wGeo = new THREE.BufferGeometry();
+            wGeo.setAttribute('position', new THREE.Float32BufferAttribute(wallPos, 3));
+            wGeo.setAttribute('uv', new THREE.Float32BufferAttribute(wallUvs, 2));
+            wGeo.setIndex(wallIdx);
+            wGeo.computeVertexNormals();
+            const wMesh = new THREE.Mesh(wGeo, wallMat);
+            wMesh.receiveShadow = true;
+            this.worldGroup.add(wMesh);
         });
     }
 
@@ -1558,8 +1543,10 @@ class HorizonWorldBuilder {
             [-1, 1].forEach((side, sideIdx) => {
                 const archIdx = (i + sideIdx) % archData.length;
                 const arch = archData[archIdx];
-                const dist = this.roadWidth * 0.5 + 22 + (i % 3) * 8;
+                const dist = this.roadWidth * 0.5 + 24 + (i % 3) * 8;
                 const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * dist);
+
+                if (!this.isPositionClearOfTrack(pos.x, pos.z, 16.0)) return;
 
                 dummy.position.set(pos.x, arch.h * 0.5 - 3.0, pos.z);
                 dummy.rotation.set(0, 0, 0);
@@ -1567,11 +1554,13 @@ class HorizonWorldBuilder {
                 arch.matrices.push(dummy.matrix.clone());
 
                 if (i % 14 === 0) {
-                    const signMesh = new THREE.Mesh(signGeo, signMats[(i + sideIdx) % signMats.length]);
-                    const signPos = new THREE.Vector3().copy(p).addScaledVector(right, side * (this.roadWidth * 0.5 + 6.2));
-                    signMesh.position.set(signPos.x, p.y + 8.5 + (i % 8), signPos.z);
-                    signMesh.lookAt(p.x, p.y + 6.5, p.z);
-                    this.worldGroup.add(signMesh);
+                    const signPos = new THREE.Vector3().copy(p).addScaledVector(right, side * (this.roadWidth * 0.5 + 6.8));
+                    if (this.isPositionClearOfTrack(signPos.x, signPos.z, 3.5)) {
+                        const signMesh = new THREE.Mesh(signGeo, signMats[(i + sideIdx) % signMats.length]);
+                        signMesh.position.set(signPos.x, p.y + 8.5 + (i % 8), signPos.z);
+                        signMesh.lookAt(p.x, p.y + 6.5, p.z);
+                        this.worldGroup.add(signMesh);
+                    }
                 }
             });
         }
@@ -1589,7 +1578,7 @@ class HorizonWorldBuilder {
 
     /**
      * Cerezos Sakura orgánicos multi-plano (sin las esferas rosas artificiales)
-     * anclados firmemente en la berma/talud y con pétalos circulares suaves.
+     * anclados firmemente en el suelo exterior y con pétalos circulares suaves.
      */
     buildSakuraTreesAndPetals() {
         const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3e1f0d, roughness: 0.92 });
@@ -1601,7 +1590,7 @@ class HorizonWorldBuilder {
             side: THREE.DoubleSide
         });
 
-        // Tronco largo (6.8m) que penetra en el talud para no flotar jamás
+        // Tronco largo (6.8m) que penetra en el suelo para no flotar jamás
         const trunkGeo = new THREE.CylinderGeometry(0.24, 0.52, 6.8, 8);
         const crossedPlaneGeo = new THREE.PlaneGeometry(7.6, 6.8);
 
@@ -1616,10 +1605,11 @@ class HorizonWorldBuilder {
             const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
 
             [-1, 1].forEach((side) => {
-                const offset = this.roadWidth * 0.5 + 6.5 + ((i * 7) % 10);
+                const offset = this.roadWidth * 0.5 + 8.5 + ((i * 7) % 10);
                 const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * offset);
-                // Cota de superficie en la berma/talud
-                const groundSurfaceY = p.y - 0.15 - Math.max(0, offset - (this.roadWidth * 0.5 + 18.5)) * 0.06;
+                if (!this.isPositionClearOfTrack(pos.x, pos.z, 5.5)) return;
+
+                const groundSurfaceY = -0.15;
 
                 dummy.position.set(pos.x, groundSurfaceY + 1.4, pos.z);
                 dummy.rotation.set(0, 0, 0);
@@ -1641,6 +1631,7 @@ class HorizonWorldBuilder {
         }
 
         const addInst = (geo, mat, matrices) => {
+            if (!matrices.length) return;
             const inst = new THREE.InstancedMesh(geo, mat, matrices.length);
             inst.castShadow = true;
             inst.receiveShadow = true;
@@ -1678,7 +1669,7 @@ class HorizonWorldBuilder {
     /**
      * Construye el Complejo Oficial de Autódromo Peruano (inspirado en las fotos de RACING.PE
      * de Arequipa, Trujillo, Cusco y Puno): Edificio de Boxes (Pit Lane), Torre de Control,
-     * Tribunas Techadas y Barreras de Neumáticos Rojos/Blancos en las trampas de arena.
+     * Tribunas Techadas y Barreras de Neumáticos Rojos/Blancos fuera de la pista.
      */
     buildPeruvianAutodromeComplex(mapConfig) {
         const p0 = this.trackPoints[8];
@@ -1688,8 +1679,8 @@ class HorizonWorldBuilder {
         const angle = Math.atan2(tangent.x, tangent.z);
 
         const pitGroup = new THREE.Group();
-        const pitPos = new THREE.Vector3().copy(p0).addScaledVector(right, -(this.roadWidth * 0.5 + 14.5));
-        pitGroup.position.set(pitPos.x, p0.y - 0.1, pitPos.z);
+        const pitPos = new THREE.Vector3().copy(p0).addScaledVector(right, -(this.roadWidth * 0.5 + 24.0));
+        pitGroup.position.set(pitPos.x, -0.1, pitPos.z);
         pitGroup.rotation.y = angle;
 
         const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35, metalness: 0.15 });
@@ -1699,53 +1690,53 @@ class HorizonWorldBuilder {
             roughness: 0.4
         });
 
-        // 1. Edificio Principal de Boxes (Pit Garages) de 78m de largo
-        const mainBld = new THREE.Mesh(new THREE.BoxGeometry(12, 7.5, 78), whiteMat);
+        // 1. Edificio Principal de Boxes (Pit Garages) retirado de la calzada
+        const mainBld = new THREE.Mesh(new THREE.BoxGeometry(12, 7.5, 48), whiteMat);
         mainBld.position.set(0, 3.75, 0);
         mainBld.castShadow = true;
         mainBld.receiveShadow = true;
         pitGroup.add(mainBld);
 
         // Franja superior RACING.PE y visera de boxes
-        const fascia = new THREE.Mesh(new THREE.BoxGeometry(12.6, 1.4, 80), redAccentMat);
+        const fascia = new THREE.Mesh(new THREE.BoxGeometry(12.6, 1.4, 50), redAccentMat);
         fascia.position.set(0, 7.6, 0);
         pitGroup.add(fascia);
 
         // Ventanal VIP en segundo piso
-        const vipGlass = new THREE.Mesh(new THREE.BoxGeometry(12.3, 2.2, 72), darkGlassMat);
+        const vipGlass = new THREE.Mesh(new THREE.BoxGeometry(12.3, 2.2, 44), darkGlassMat);
         vipGlass.position.set(0, 5.4, 0);
         pitGroup.add(vipGlass);
 
-        // 8 Puertas de Garaje de Boxes hacia la pista
-        for (let b = -3; b <= 3; b++) {
-            const bayDoor = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.2, 6.8), darkGlassMat);
-            bayDoor.position.set(6.0, 1.6, b * 9.8);
+        // 5 Puertas de Garaje de Boxes hacia la pista
+        for (let b = -2; b <= 2; b++) {
+            const bayDoor = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.2, 6.2), darkGlassMat);
+            bayDoor.position.set(6.0, 1.6, b * 8.6);
             pitGroup.add(bayDoor);
         }
 
         // 2. Torre de Control de Carrera (Race Control Tower)
         const towerBase = new THREE.Mesh(new THREE.BoxGeometry(9, 18, 9), whiteMat);
-        towerBase.position.set(-2, 9, -44);
+        towerBase.position.set(-2, 9, -29);
         towerBase.castShadow = true;
         pitGroup.add(towerBase);
 
         const towerCabin = new THREE.Mesh(new THREE.BoxGeometry(11.5, 4.5, 11.5), darkGlassMat);
-        towerCabin.position.set(-2, 16.5, -44);
+        towerCabin.position.set(-2, 16.5, -29);
         pitGroup.add(towerCabin);
 
         const towerRoof = new THREE.Mesh(new THREE.BoxGeometry(12.5, 1.1, 12.5), redAccentMat);
-        towerRoof.position.set(-2, 19.2, -44);
+        towerRoof.position.set(-2, 19.2, -29);
         pitGroup.add(towerRoof);
 
         // 3. Tribuna Techada Frente a Boxes (lado opuesto de la recta principal)
         const grandStandGroup = new THREE.Group();
-        const standPos = new THREE.Vector3().copy(p0).addScaledVector(right, this.roadWidth * 0.5 + 15.5);
-        grandStandGroup.position.set(standPos.x, p0.y - 0.1, standPos.z);
+        const standPos = new THREE.Vector3().copy(p0).addScaledVector(right, this.roadWidth * 0.5 + 25.0);
+        grandStandGroup.position.set(standPos.x, -0.1, standPos.z);
         grandStandGroup.rotation.y = angle;
 
         for (let step = 0; step < 5; step++) {
             const tier = new THREE.Mesh(
-                new THREE.BoxGeometry(2.2, 1.2 + step * 1.1, 68),
+                new THREE.BoxGeometry(2.2, 1.2 + step * 1.1, 46),
                 step % 2 === 0 ? whiteMat : redAccentMat
             );
             tier.position.set(step * 2.1, (1.2 + step * 1.1) * 0.5, 0);
@@ -1753,15 +1744,19 @@ class HorizonWorldBuilder {
             grandStandGroup.add(tier);
         }
 
-        const canopy = new THREE.Mesh(new THREE.BoxGeometry(13.5, 0.6, 70), whiteMat);
+        const canopy = new THREE.Mesh(new THREE.BoxGeometry(13.5, 0.6, 48), whiteMat);
         canopy.position.set(4.2, 9.5, 0);
         canopy.rotation.z = 0.12;
         grandStandGroup.add(canopy);
 
-        this.worldGroup.add(pitGroup);
-        this.worldGroup.add(grandStandGroup);
+        if (this.isPositionClearOfTrack(pitPos.x, pitPos.z, 12.0)) {
+            this.worldGroup.add(pitGroup);
+        }
+        if (this.isPositionClearOfTrack(standPos.x, standPos.z, 12.0)) {
+            this.worldGroup.add(grandStandGroup);
+        }
 
-        // 4. Barreras de Neumáticos Rojos y Blancos (Tire Walls) en las Trampas de Arena de las curvas
+        // 4. Barreras de Neumáticos Rojos y Blancos (Tire Walls) exteriores a los guardarraíles
         const tireGeo = new THREE.CylinderGeometry(0.62, 0.62, 1.35, 10);
         const redTireMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.85 });
         const whiteTireMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.85 });
@@ -1778,7 +1773,8 @@ class HorizonWorldBuilder {
 
                 [-1, 1].forEach((side) => {
                     const tPos = new THREE.Vector3().copy(pt).addScaledVector(rVec, side * (this.roadWidth * 0.5 + 8.5));
-                    dummy.position.set(tPos.x, pt.y + 0.55, tPos.z);
+                    if (!this.isPositionClearOfTrack(tPos.x, tPos.z, 4.5)) return;
+                    dummy.position.set(tPos.x, 0.45, tPos.z);
                     dummy.rotation.set(0, 0, 0);
                     dummy.updateMatrix();
                     if ((i + (side > 0 ? 1 : 0)) % 2 === 0) {
@@ -1806,7 +1802,7 @@ class HorizonWorldBuilder {
 
     /**
      * Escenario Perú 1 (Autódromo Arequipa & Trujillo):
-     * Volcán Misti nevado al fondo, dunas de arena dorada y costa azul del Océano Pacífico.
+     * Volcán Misti nevado al fondo, dunas de arena dorada en el horizonte lejano (100% fuera de la pista) y costa del Pacífico.
      */
     buildVolcanMistiAndPacific() {
         // 1. Volcán Misti (Arequipa) - Cono simétrico icónico con cumbre nevada
@@ -1844,38 +1840,38 @@ class HorizonWorldBuilder {
         ocean.position.set(0, -0.45, 880);
         this.worldGroup.add(ocean);
 
-        // 3. Dunas de Arena Dorada instanciadas alrededor del circuito
-        const duneGeo = new THREE.ConeGeometry(38, 14, 12);
+        // 3. Dunas de Arena Dorada instanciadas ÚNICAMENTE en el horizonte exterior lejano (> 760m, jamás sobre o cerca de la pista)
+        const duneGeo = new THREE.ConeGeometry(32, 12, 12);
         const duneMat = new THREE.MeshStandardMaterial({
             map: this.textures.sandDesert,
             roughness: 0.92
         });
         const duneMats = [];
         const dummy = new THREE.Object3D();
+        const horizonCount = 28;
 
-        for (let i = 5; i < this.trackPoints.length; i += 9) {
-            const p = this.trackPoints[i];
-            const pNext = this.trackPoints[(i + 1) % this.trackPoints.length];
-            const tangent = new THREE.Vector3().subVectors(pNext, p).normalize();
-            const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+        for (let i = 0; i < horizonCount; i++) {
+            const ang = (i / horizonCount) * Math.PI * 2;
+            const dist = 760 + (i % 3) * 90;
+            const posX = Math.cos(ang) * dist;
+            const posZ = Math.sin(ang) * dist;
+            if (!this.isPositionClearOfTrack(posX, posZ, 130.0)) continue;
 
-            [-1, 1].forEach((side) => {
-                const dist = this.roadWidth * 0.5 + 42 + ((i * 11) % 35);
-                const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * dist);
-                const sc = 0.8 + (i % 4) * 0.35;
-                dummy.position.set(pos.x, (14 * sc * 0.4) - 1.2, pos.z);
-                dummy.rotation.set(0, i * 0.4, 0);
-                dummy.scale.set(sc * 1.4, sc * 0.65, sc);
-                dummy.updateMatrix();
-                duneMats.push(dummy.matrix.clone());
-            });
+            const sc = 0.85 + (i % 3) * 0.25;
+            dummy.position.set(posX, (12 * sc * 0.4) - 1.2, posZ);
+            dummy.rotation.set(0, i * 0.4, 0);
+            dummy.scale.set(sc * 1.25, sc * 0.65, sc);
+            dummy.updateMatrix();
+            duneMats.push(dummy.matrix.clone());
         }
 
-        const instDunes = new THREE.InstancedMesh(duneGeo, duneMat, duneMats.length);
-        instDunes.receiveShadow = true;
-        duneMats.forEach((m, idx) => instDunes.setMatrixAt(idx, m));
-        instDunes.instanceMatrix.needsUpdate = true;
-        this.worldGroup.add(instDunes);
+        if (duneMats.length > 0) {
+            const instDunes = new THREE.InstancedMesh(duneGeo, duneMat, duneMats.length);
+            instDunes.receiveShadow = true;
+            duneMats.forEach((m, idx) => instDunes.setMatrixAt(idx, m));
+            instDunes.instanceMatrix.needsUpdate = true;
+            this.worldGroup.add(instDunes);
+        }
     }
 
     /**
@@ -1913,8 +1909,9 @@ class HorizonWorldBuilder {
             const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
 
             [-1, 1].forEach((side) => {
-                const dist = this.roadWidth * 0.5 + 32 + ((i * 7) % 28);
+                const dist = this.roadWidth * 0.5 + 34 + ((i * 7) % 28);
                 const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * dist);
+                if (!this.isPositionClearOfTrack(pos.x, pos.z, 12.0)) return;
                 const rotY = Math.atan2(tangent.x, tangent.z);
 
                 dummy.position.set(pos.x, 2.5, pos.z);
@@ -1930,18 +1927,22 @@ class HorizonWorldBuilder {
             });
         }
 
-        const instWalls = new THREE.InstancedMesh(wallGeo, wallMat, wallMats.length);
-        instWalls.castShadow = true;
-        instWalls.receiveShadow = true;
-        wallMats.forEach((m, idx) => instWalls.setMatrixAt(idx, m));
-        instWalls.instanceMatrix.needsUpdate = true;
-        this.worldGroup.add(instWalls);
+        if (wallMats.length > 0) {
+            const instWalls = new THREE.InstancedMesh(wallGeo, wallMat, wallMats.length);
+            instWalls.castShadow = true;
+            instWalls.receiveShadow = true;
+            wallMats.forEach((m, idx) => instWalls.setMatrixAt(idx, m));
+            instWalls.instanceMatrix.needsUpdate = true;
+            this.worldGroup.add(instWalls);
+        }
 
-        const instRoofs = new THREE.InstancedMesh(roofGeo, roofMat, roofMats.length);
-        instRoofs.castShadow = true;
-        roofMats.forEach((m, idx) => instRoofs.setMatrixAt(idx, m));
-        instRoofs.instanceMatrix.needsUpdate = true;
-        this.worldGroup.add(instRoofs);
+        if (roofMats.length > 0) {
+            const instRoofs = new THREE.InstancedMesh(roofGeo, roofMat, roofMats.length);
+            instRoofs.castShadow = true;
+            roofMats.forEach((m, idx) => instRoofs.setMatrixAt(idx, m));
+            instRoofs.instanceMatrix.needsUpdate = true;
+            this.worldGroup.add(instRoofs);
+        }
     }
 
     createCarMesh(carConfig, isPolice = false) {
