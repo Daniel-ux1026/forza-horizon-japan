@@ -51,12 +51,14 @@ function createBrowserEnvironment() {
 
     const createMockElement = (tag, id = '') => {
         const listeners = {};
+        const attrs = new Map();
         const el = {
             tagName: tag.toUpperCase(),
             id,
             className: '',
             textContent: '',
             innerHTML: '',
+            src: '',
             value: '0',
             width: 512,
             height: 512,
@@ -64,13 +66,21 @@ function createBrowserEnvironment() {
             style: {},
             children: [],
             classList: classListFactory(),
+            setAttribute(k, v) { attrs.set(k, String(v)); },
+            getAttribute(k) { return attrs.get(k) || null; },
+            querySelector() { return null; },
+            querySelectorAll() { return []; },
+            closest() { return null; },
             appendChild(child) { this.children.push(child); return child; },
             addEventListener(ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); },
             dispatchEvent(evObj) { (listeners[evObj.type] || []).forEach(fn => fn(evObj)); },
-            click() { (listeners['click'] || []).forEach(fn => fn({ preventDefault: () => {} })); },
+            click() { (listeners['click'] || []).forEach(fn => fn({ preventDefault: () => {}, target: el })); },
             getContext(type) {
                 if (type === '2d') return makeCanvas2DContext();
                 return {};
+            },
+            toDataURL() {
+                return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
             },
             getBoundingClientRect: () => ({ left: 0, top: 0, width: 120, height: 120 })
         };
@@ -80,23 +90,36 @@ function createBrowserEnvironment() {
 
     [
         'game-canvas', 'minimap-canvas', 'nfs-countdown-overlay', 'nfs-countdown-text', 'nfs-countdown-sub',
-        'hud-fps', 'quality-badge', 'hud-map-name', 'hud-map-subtitle', 'hud-race-pos', 'hud-lap-num',
+        'hud-overlay', 'hud-fps', 'quality-badge', 'hud-map-name', 'hud-map-subtitle', 'hud-race-pos', 'hud-lap-num',
         'hud-lap-time', 'hud-cp-timer', 'hud-total-score', 'drift-skill-banner', 'drift-chain-points',
         'btn-open-garage', 'btn-camera-toggle', 'btn-reset-car', 'btn-toggle-touch', 'btn-pause-race',
         'hud-car-name', 'hud-car-class', 'hud-speed', 'hud-gear', 'hud-rpm-fill', 'hud-rpm-text',
         'hud-nitro-fill', 'mobile-touch-controls', 'joystick-zone', 'joystick-knob',
         'btn-touch-drift', 'btn-touch-nitro', 'btn-touch-brake', 'btn-touch-gas',
         'finish-race-modal', 'finish-title', 'finish-position', 'finish-total-time',
-        'finish-best-lap', 'finish-drift-score', 'finish-standings-body', 'btn-finish-restart', 'btn-finish-garage',
-        'festival-modal', 'btn-start-driving', 'gamemode-select', 'difficulty-select',
+        'finish-best-lap', 'finish-drift-score', 'finish-standings-body', 'btn-finish-restart', 'btn-finish-garage', 'btn-finish-main-menu',
+        'festival-modal', 'festival-modal-title', 'festival-modal-subtitle', 'wizard-steps-bar',
+        'btn-menu-back', 'btn-start-driving', 'gamemode-select', 'difficulty-select', 'gamemode-cards-row', 'difficulty-cards-row',
         'tuning-stage-select', 'cars-selector-grid', 'maps-selector-grid',
         'tuning-body-color', 'tuning-neon-color', 'tuning-rim-color', 'quality-preset-select',
-        'music-volume-slider', 'custom-music-input', 'pause-modal', 'btn-resume-race', 'btn-pause-restart',
-        'btn-pause-garage', 'hud-police-heat'
+        'master-volume-slider', 'music-volume-slider', 'sfx-volume-slider', 'btn-mute-toggle', 'custom-music-input',
+        'pause-modal', 'btn-resume-race', 'btn-pause-restart', 'btn-pause-options', 'btn-pause-garage', 'btn-pause-main-menu', 'hud-police-heat',
+        'welcome-screen', 'btn-press-start', 'welcome-showcase-car',
+        'main-menu-screen', 'btn-menu-play', 'btn-menu-garage', 'btn-menu-options', 'btn-menu-credits', 'btn-menu-quick-race',
+        'menu-active-car-name', 'menu-active-car-class', 'menu-active-car-cat', 'menu-active-map-name', 'menu-active-mode-name',
+        'step-car-selection', 'step-track-selection', 'step-race-setup', 'step-options', 'step-credits',
+        'car-3d-turntable-zone', 'btn-prev-car-3d', 'btn-next-car-3d', 'btn-rotate-car-left', 'btn-rotate-car-right', 'btn-rotate-car-auto', 'btn-rev-car-engine',
+        'btn-confirm-car', 'btn-garage-return-menu', 'btn-back-to-cars', 'btn-confirm-track',
+        'setup-summary-car-name', 'setup-summary-car-specs', 'setup-summary-car-tuning', 'setup-summary-map-img', 'setup-summary-map-name', 'setup-summary-map-meta',
+        'loading-screen', 'loading-map-title', 'loading-car-summary', 'loading-progress-fill', 'loading-status-text'
     ].forEach(id => createMockElement('div', id));
 
     elements.get('pause-modal').classList.add('hidden');
     elements.get('finish-race-modal').classList.add('hidden');
+    elements.get('main-menu-screen').classList.add('hidden');
+    elements.get('festival-modal').classList.add('hidden');
+    elements.get('loading-screen').classList.add('hidden');
+    elements.get('hud-overlay').classList.add('hidden');
 
     const eqBars = Array.from({ length: 8 }, () => createMockElement('div'));
     const domReadyListeners = [];
@@ -166,8 +189,17 @@ function createBrowserEnvironment() {
         }
     };
 
+    const storageMap = new Map();
+    const localStorage = {
+        getItem: (k) => (storageMap.has(k) ? storageMap.get(k) : null),
+        setItem: (k, v) => { storageMap.set(k, String(v)); },
+        removeItem: (k) => { storageMap.delete(k); },
+        clear: () => { storageMap.clear(); }
+    };
+
     const windowObj = {
         document,
+        localStorage,
         performance: perf,
         innerWidth: 1920,
         innerHeight: 1080,
@@ -246,6 +278,8 @@ for (const file of ['js/data.js', 'js/audio.js', 'js/world.js', 'js/game.js']) {
 env.windowObj.triggerDOMReady();
 const game = sandbox.window.horizonGame;
 const audio = sandbox.window.horizonAudio;
+const initialMenuState = game.menuState;
+const initialRaceState = game.raceState;
 
 function stepGame(dt = 0.02, steps = 1) {
     for (let i = 0; i < steps; i++) {
@@ -522,5 +556,89 @@ report.cameraAndHandlingTest = {
     subSegmentTrackProjection: true
 };
 report.passedTests.push('Zero Camera Jitter under Variable Frame Dt & Tight Progressive Steering');
+
+// 10. Prueba del Flujo Completo del Menú Cinematográfico:
+// WELCOME -> MAIN_MENU -> CAR_SELECTION -> TRACK_SELECTION -> RACE_SETUP -> LOADING -> RACING + PAUSED -> MAIN_MENU + Persistencia
+assert.equal(initialMenuState, 'WELCOME', `Expected initial menuState to be WELCOME on startup, got ${initialMenuState}`);
+assert.equal(initialRaceState, 'garage', `Expected initial raceState to be garage on startup, got ${initialRaceState}`);
+
+game.returnToMainMenu();
+game.navigateTo('WELCOME');
+assert.equal(game.menuState, 'WELCOME', 'Must be in WELCOME state');
+assert.equal(env.elements.get('welcome-screen').classList.contains('hidden'), false, 'Welcome screen should be visible');
+
+// Pulsar START -> MAIN_MENU
+env.elements.get('btn-press-start').click();
+assert.equal(game.menuState, 'MAIN_MENU', 'Pressing START must transition to MAIN_MENU');
+assert.equal(env.elements.get('main-menu-screen').classList.contains('hidden'), false, 'Main menu screen should be visible');
+
+// Pulsar JUGAR -> CAR_SELECTION (Garaje 3D)
+env.elements.get('btn-menu-play').click();
+assert.equal(game.menuState, 'CAR_SELECTION', 'Clicking JUGAR must transition to CAR_SELECTION');
+assert.equal(env.elements.get('step-car-selection').classList.contains('hidden'), false, 'Car selection step must be visible');
+
+// Seleccionar un vehículo (por ejemplo, Honda NSX-R índice 6) y rotar el visor 3D
+game.loadPlayerCar(6);
+env.elements.get('btn-rotate-car-right').click();
+env.elements.get('btn-confirm-car').click();
+assert.equal(game.menuState, 'TRACK_SELECTION', 'Confirming car must transition to TRACK_SELECTION');
+assert.equal(env.elements.get('step-track-selection').classList.contains('hidden'), false, 'Track selection step must be visible');
+
+// Verificar que las 5 tarjetas de circuitos existen y tienen imágenes previas válidas no vacías
+const mapCards = env.elements.get('maps-selector-grid').children;
+assert.equal(mapCards.length, 5, `Expected 5 circuit cards in TRACK_SELECTION, got ${mapCards.length}`);
+for (let m = 0; m < 5; m++) {
+    const previewUrl = game.world.generateCircuitPreviewDataUrl(sandbox.window.FH6_DATA.maps[m]);
+    assert.ok(previewUrl && previewUrl.startsWith('data:image/'), `Circuit ${m} preview URL must be a valid data:image URL`);
+    assert.ok(mapCards[m].innerHTML.includes('data:image/'), `Circuit card ${m} must include non-empty preview image`);
+}
+
+// Seleccionar el circuito Perú: Autódromo Andino Cusco & Lago Titicaca (índice 4) y confirmar
+game.loadMap(4);
+env.elements.get('btn-confirm-track').click();
+assert.equal(game.menuState, 'RACE_SETUP', 'Confirming track must transition to RACE_SETUP');
+assert.equal(env.elements.get('step-race-setup').classList.contains('hidden'), false, 'Race setup step must be visible');
+assert.ok(env.elements.get('setup-summary-car-name').textContent.includes('NSX-R'), 'Race setup must summarize selected car');
+assert.ok(env.elements.get('setup-summary-map-name').textContent.includes('Cusco'), 'Race setup must summarize selected track');
+
+// Probar navegación hacia atrás (RACE_SETUP -> TRACK_SELECTION -> CAR_SELECTION -> MAIN_MENU) y regresar a RACE_SETUP
+game.navigateBack();
+assert.equal(game.menuState, 'TRACK_SELECTION', 'Back from RACE_SETUP must return to TRACK_SELECTION');
+game.navigateBack();
+assert.equal(game.menuState, 'CAR_SELECTION', 'Back from TRACK_SELECTION must return to CAR_SELECTION');
+game.navigateBack();
+assert.equal(game.menuState, 'MAIN_MENU', 'Back from CAR_SELECTION must return to MAIN_MENU');
+game.navigateTo('RACE_SETUP');
+
+// Pulsar INICIAR CARRERA -> LOADING -> RACING
+env.elements.get('btn-start-driving').click();
+assert.equal(game.menuState, 'LOADING', 'Clicking INICIAR CARRERA must enter LOADING state');
+assert.equal(env.elements.get('loading-screen').classList.contains('hidden'), false, 'Loading screen must be visible');
+
+// Completar transición a carrera y verificar PAUSED -> MAIN_MENU
+game.startNewRace();
+game.raceState = 'racing';
+assert.equal(game.menuState, 'RACING', 'Menu state during race must be RACING');
+game.togglePauseRace(true);
+assert.equal(game.menuState, 'PAUSED', 'Pausing race must set menuState to PAUSED');
+env.elements.get('btn-pause-main-menu').click();
+assert.equal(game.menuState, 'MAIN_MENU', 'Clicking Volver al Menú Principal from pause must return to MAIN_MENU');
+
+// Verificar persistencia en localStorage
+const savedPrefsRaw = env.windowObj.localStorage.getItem('fh6_user_prefs_v2');
+assert.ok(savedPrefsRaw, 'User preferences must be persisted in localStorage');
+const savedPrefs = JSON.parse(savedPrefsRaw);
+assert.equal(savedPrefs.selectedCarIndex, 6, 'Persisted car index must match selection (6)');
+assert.equal(savedPrefs.selectedMapIndex, 4, 'Persisted map index must match selection (4)');
+
+report.cinematicMenuTest = {
+    initialState: initialMenuState,
+    fullFlowVerified: 'WELCOME -> MAIN_MENU -> CAR_SELECTION -> TRACK_SELECTION -> RACE_SETUP -> LOADING -> RACING',
+    pauseToMainMenuVerified: true,
+    backwardNavigationVerified: true,
+    fiveTrackPreviewsGenerated: mapCards.length,
+    persistedSelection: { carIndex: savedPrefs.selectedCarIndex, mapIndex: savedPrefs.selectedMapIndex }
+};
+report.passedTests.push('Cinematic Menu State Machine (WELCOME -> MAIN_MENU -> GARAGE -> 5 TRACKS -> SETUP -> LOADING -> RACING + Persistence)');
 
 console.log(JSON.stringify(report, null, 2));

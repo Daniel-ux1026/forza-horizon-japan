@@ -16,6 +16,17 @@ class HorizonGameEngine {
 
         this.maxLaps = 3;
         this.raceState = 'garage'; // 'garage' | 'countdown' | 'racing' | 'paused' | 'finished'
+        this.menuState = 'WELCOME'; // 'WELCOME' | 'MAIN_MENU' | 'CAR_SELECTION' | 'TRACK_SELECTION' | 'RACE_SETUP' | 'OPTIONS' | 'CREDITS' | 'LOADING' | 'RACING' | 'PAUSED'
+        this.optionsOriginState = 'MAIN_MENU';
+        this.mainMenuFocusIndex = 0;
+        this.turntableAngle = 0.55;
+        this.turntableAutoRotate = true;
+        this.isDraggingTurntable = false;
+        this.turntableLastX = 0;
+        this.showroomOrbitAngle = 0.4;
+        this.loadingTimers = [];
+        this.customCarColors = {};
+
         this.cameraMode = 0;
         this.cameraShake = 0;
         this.pauseStartedAt = 0;
@@ -83,16 +94,74 @@ class HorizonGameEngine {
 
         this.initThreeJS();
         this.world = new window.HorizonWorldBuilder(this.scene, this.renderer);
+        this.loadUserPreferences();
         this.setupInputs();
         this.setupUIEvents();
 
-        // Cargar escenario y auto inicial
+        // Cargar escenario y auto inicial en el Showroom 3D y abrir en pantalla WELCOME
         this.loadMap(this.selectedMapIndex);
         this.loadPlayerCar(this.selectedCarIndex);
         this.prepareStartingGrid();
+        this.navigateTo('WELCOME');
 
         this.lastFrameTime = performance.now();
         requestAnimationFrame((t) => this.gameLoop(t));
+    }
+
+    loadUserPreferences() {
+        try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+                const raw = window.localStorage.getItem('fh6_user_prefs_v2');
+                if (raw) {
+                    const prefs = JSON.parse(raw);
+                    if (typeof prefs.selectedCarIndex === 'number' && prefs.selectedCarIndex >= 0 && prefs.selectedCarIndex < window.FH6_DATA.cars.length) {
+                        this.selectedCarIndex = prefs.selectedCarIndex;
+                    }
+                    if (typeof prefs.selectedMapIndex === 'number' && prefs.selectedMapIndex >= 0 && prefs.selectedMapIndex < window.FH6_DATA.maps.length) {
+                        this.selectedMapIndex = prefs.selectedMapIndex;
+                    }
+                    if (typeof prefs.selectedDifficultyIndex === 'number' && prefs.selectedDifficultyIndex >= 0 && prefs.selectedDifficultyIndex < window.FH6_DATA.difficulties.length) {
+                        this.selectedDifficultyIndex = prefs.selectedDifficultyIndex;
+                    }
+                    if (typeof prefs.selectedGameModeIndex === 'number' && prefs.selectedGameModeIndex >= 0 && prefs.selectedGameModeIndex < window.FH6_DATA.gameModes.length) {
+                        this.selectedGameModeIndex = prefs.selectedGameModeIndex;
+                    }
+                    if (typeof prefs.selectedTuningIndex === 'number' && prefs.selectedTuningIndex >= 0 && prefs.selectedTuningIndex < window.FH6_DATA.tuningStages.length) {
+                        this.selectedTuningIndex = prefs.selectedTuningIndex;
+                    }
+                    if (prefs.qualityPreset && ['high', 'balanced', 'mobile'].includes(prefs.qualityPreset)) {
+                        this.applyQualityPreset(prefs.qualityPreset);
+                    }
+                    if (prefs.customCarColors && typeof prefs.customCarColors === 'object') {
+                        this.customCarColors = prefs.customCarColors;
+                        window.FH6_DATA.cars.forEach((car) => {
+                            const saved = this.customCarColors[car.id];
+                            if (saved) {
+                                if (typeof saved.color === 'number') car.color = saved.color;
+                                if (typeof saved.neonColor === 'number') car.neonColor = saved.neonColor;
+                                if (typeof saved.rimColor === 'number') car.rimColor = saved.rimColor;
+                            }
+                        });
+                    }
+                }
+            }
+        } catch (e) {}
+    }
+
+    saveUserPreferences() {
+        try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+                window.localStorage.setItem('fh6_user_prefs_v2', JSON.stringify({
+                    selectedCarIndex: this.selectedCarIndex,
+                    selectedMapIndex: this.selectedMapIndex,
+                    selectedDifficultyIndex: this.selectedDifficultyIndex,
+                    selectedGameModeIndex: this.selectedGameModeIndex,
+                    selectedTuningIndex: this.selectedTuningIndex,
+                    qualityPreset: this.qualityPreset,
+                    customCarColors: this.customCarColors
+                }));
+            }
+        } catch (e) {}
     }
 
     detectMobileDevice() {
@@ -187,7 +256,14 @@ class HorizonGameEngine {
 
         document.querySelectorAll('.map-card').forEach((card, idx) => {
             card.classList.toggle('active', idx === index);
+            const btn = card.querySelector('.btn-select-map');
+            if (btn) {
+                btn.textContent = idx === index ? '✓ CIRCUITO SELECCIONADO' : 'SELECCIONAR CIRCUITO';
+            }
         });
+
+        this.updateMenuSummaries();
+        this.saveUserPreferences();
     }
 
     loadPlayerCar(index) {
@@ -221,6 +297,9 @@ class HorizonGameEngine {
         });
 
         this.prepareStartingGrid();
+        this.updateGarageLiveSpecs();
+        this.updateMenuSummaries();
+        this.saveUserPreferences();
     }
 
     // Coloca al jugador y a los 6 competidores en la Parrilla de Salida (Starting Grid)
@@ -280,17 +359,24 @@ class HorizonGameEngine {
         this.updateCamera(0.1);
     }
 
-    // Inicia la secuencia cinematográfica estilo Need For Speed: "PREPARADOS" -> "LISTOS" -> "¡VAMOS!"
+    // Inicia la secuencia cinematográfica estilo Need For Speed: "3 • PREPARADOS" -> "2 • LISTOS" -> "1 • ¡VAMOS!"
     startNewRace() {
         window.horizonAudio.init();
-        this.toggleGarageModal(false);
-        this.hideFinishModal();
-        this.hidePauseModal();
+        window.horizonAudio.setMenuMusicContext('racing');
 
+        this.loadingTimers.forEach(t => clearTimeout(t));
+        this.loadingTimers = [];
         this.countdownTimers.forEach(t => clearTimeout(t));
         this.countdownTimers = [];
 
+        this.hideAllMenuScreens();
+        this.hideFinishModal();
+        this.hidePauseModal();
+        const hudEl = document.getElementById('hud-overlay');
+        if (hudEl) hudEl.classList.remove('hidden');
+
         this.prepareStartingGrid();
+        this.menuState = 'RACING';
         this.raceState = 'countdown';
         this.totalSkillScore = 0;
         this.currentDriftChain = 0;
@@ -325,19 +411,19 @@ class HorizonGameEngine {
             window.horizonAudio.playCountdownBeep(soundStage);
         };
 
-        // Paso 1: PREPARADOS
-        triggerStage('PREPARADOS', 'PARRILLA DE 7 AUTOS • ACELERA PARA REVOLUCIONAR', 'stage-ready', 'ready');
+        // Paso 1: 3 • PREPARADOS
+        triggerStage('3 • PREPARADOS', 'PARRILLA DE 7 AUTOS • ACELERA PARA REVOLUCIONAR', 'stage-ready', 'ready');
 
-        // Paso 2: LISTOS
+        // Paso 2: 2 • LISTOS
         this.countdownTimers.push(setTimeout(() => {
-            triggerStage('LISTOS', 'MANTÉN EL TURBO EN ZONA ÓPTIMA', 'stage-set', 'set');
+            triggerStage('2 • LISTOS', '1 • MANTÉN EL TURBO EN ZONA ÓPTIMA', 'stage-set', 'set');
         }, 1150));
 
-        // Paso 3: ¡VAMOS! -> Arrancan los 7 autos
+        // Paso 3: ¡VAMOS! / GO! -> Arrancan los 7 autos
         this.countdownTimers.push(setTimeout(() => {
             const isPerfectLaunch = this.rpm >= 4800 && this.rpm <= 7800;
             triggerStage(
-                '¡VAMOS!',
+                '¡VAMOS! • GO!',
                 isPerfectLaunch ? '🔥 ¡SALIDA TURBO PERFECTA! 🔥' : '🏁 ¡A POR EL 1º PUESTO EN 3 VUELTAS!',
                 'stage-go',
                 'go'
@@ -360,27 +446,134 @@ class HorizonGameEngine {
         }, 3250));
     }
 
+    // Transición validada: RACE_SETUP -> LOADING -> RACING
+    launchRaceWithLoading() {
+        window.horizonAudio.init();
+        window.horizonAudio.playUiConfirm();
+
+        // 1. Validar selección de vehículo y circuito
+        if (this.selectedCarIndex < 0 || this.selectedCarIndex >= window.FH6_DATA.cars.length) {
+            this.selectedCarIndex = 0;
+        }
+        if (this.selectedMapIndex < 0 || this.selectedMapIndex >= window.FH6_DATA.maps.length) {
+            this.selectedMapIndex = 0;
+        }
+        this.saveUserPreferences();
+
+        // 2. Mostrar pantalla de carga estilizada
+        this.navigateTo('LOADING');
+        const mapData = window.FH6_DATA.maps[this.selectedMapIndex];
+        const carData = window.FH6_DATA.cars[this.selectedCarIndex];
+        const modeData = window.FH6_DATA.gameModes[this.selectedGameModeIndex];
+        const diffData = window.FH6_DATA.difficulties[this.selectedDifficultyIndex];
+
+        const titleEl = document.getElementById('loading-map-title');
+        const summaryEl = document.getElementById('loading-car-summary');
+        const fillEl = document.getElementById('loading-progress-fill');
+        const statusEl = document.getElementById('loading-status-text');
+
+        if (titleEl && mapData) titleEl.textContent = mapData.name;
+        if (summaryEl && carData && modeData && diffData) {
+            summaryEl.textContent = `${carData.name} (${carData.classRating}) • ${modeData.shortName} • IA: ${diffData.name}`;
+        }
+        if (fillEl) fillEl.style.width = '22%';
+        if (statusEl) statusEl.textContent = 'Validando vehículo, tuning y telemetría de pista...';
+
+        this.loadingTimers.forEach(t => clearTimeout(t));
+        this.loadingTimers = [];
+
+        this.loadingTimers.push(setTimeout(() => {
+            if (fillEl) fillEl.style.width = '68%';
+            if (statusEl) statusEl.textContent = 'Inicializando circuito 3D y posicionando los 6 rivales JDM...';
+            this.loadMap(this.selectedMapIndex);
+            this.loadPlayerCar(this.selectedCarIndex);
+        }, 220));
+
+        this.loadingTimers.push(setTimeout(() => {
+            if (fillEl) fillEl.style.width = '100%';
+            if (statusEl) statusEl.textContent = '¡Parrilla lista! Iniciando semáforo de salida...';
+        }, 520));
+
+        this.loadingTimers.push(setTimeout(() => {
+            this.startNewRace();
+        }, 720));
+    }
+
     setupInputs() {
         window.addEventListener('keydown', (e) => {
             const code = e.code;
             this.keys[code] = true;
             window.horizonAudio.init();
 
-            if (code === 'KeyC') {
+            // Navegación por Teclado en Pantalla de Bienvenida (WELCOME)
+            if (this.menuState === 'WELCOME') {
+                if (code === 'Enter' || code === 'Space') {
+                    e.preventDefault();
+                    window.horizonAudio.playUiConfirm();
+                    this.navigateTo('MAIN_MENU');
+                }
+                return;
+            }
+
+            // Navegación por Teclado en Menú Principal (MAIN_MENU)
+            if (this.menuState === 'MAIN_MENU') {
+                const navButtons = Array.from(document.querySelectorAll('#main-menu-screen .menu-nav-btn'));
+                if (code === 'ArrowDown' || code === 'KeyS') {
+                    e.preventDefault();
+                    this.mainMenuFocusIndex = (this.mainMenuFocusIndex + 1) % Math.max(1, navButtons.length);
+                    navButtons.forEach((b, idx) => b.classList.toggle('active-focus', idx === this.mainMenuFocusIndex));
+                    window.horizonAudio.playUiHover();
+                } else if (code === 'ArrowUp' || code === 'KeyW') {
+                    e.preventDefault();
+                    this.mainMenuFocusIndex = (this.mainMenuFocusIndex - 1 + Math.max(1, navButtons.length)) % Math.max(1, navButtons.length);
+                    navButtons.forEach((b, idx) => b.classList.toggle('active-focus', idx === this.mainMenuFocusIndex));
+                    window.horizonAudio.playUiHover();
+                } else if (code === 'Enter' || code === 'Space') {
+                    e.preventDefault();
+                    const activeBtn = navButtons[this.mainMenuFocusIndex];
+                    if (activeBtn) activeBtn.click();
+                } else if (code === 'Escape') {
+                    e.preventDefault();
+                    this.navigateBack();
+                } else if (code === 'KeyG') {
+                    e.preventDefault();
+                    this.navigateTo('CAR_SELECTION');
+                }
+                return;
+            }
+
+            // Controles rápidos en Garaje 3D (Rotar auto con flechas o cambiar con Q/E)
+            if (this.menuState === 'CAR_SELECTION') {
+                if (code === 'ArrowLeft') {
+                    this.turntableAutoRotate = false;
+                    this.turntableAngle -= 0.22;
+                } else if (code === 'ArrowRight') {
+                    this.turntableAutoRotate = false;
+                    this.turntableAngle += 0.22;
+                }
+            }
+
+            if (code === 'KeyC' && (this.raceState === 'racing' || this.raceState === 'countdown')) {
                 this.cameraMode = (this.cameraMode + 1) % 3;
-            } else if (code === 'KeyR') {
+            } else if (code === 'KeyR' && (this.raceState === 'racing' || this.raceState === 'paused')) {
                 this.startNewRace();
             } else if (code === 'KeyM' || code === 'KeyN') {
                 window.horizonAudio.nextTrack();
             } else if (code === 'KeyP') {
-                this.togglePauseRace();
+                if (this.raceState === 'racing' || this.raceState === 'paused') {
+                    this.togglePauseRace();
+                }
             } else if (code === 'KeyG') {
-                this.toggleGarageModal();
+                if (this.menuState === 'CAR_SELECTION') {
+                    this.navigateBack();
+                } else {
+                    this.navigateTo('CAR_SELECTION');
+                }
             } else if (code === 'Escape') {
                 if (this.raceState === 'racing' || this.raceState === 'paused') {
                     this.togglePauseRace();
                 } else {
-                    this.toggleGarageModal();
+                    this.navigateBack();
                 }
             }
         });
@@ -1042,6 +1235,7 @@ class HorizonGameEngine {
         const wantPause = typeof forcePause === 'boolean' ? forcePause : (this.raceState === 'racing');
         if (wantPause && this.raceState === 'racing') {
             this.raceState = 'paused';
+            this.menuState = 'PAUSED';
             this.pauseStartedAt = performance.now();
             if (modal) modal.classList.remove('hidden');
             if (this.currentCarConfig) {
@@ -1052,14 +1246,83 @@ class HorizonGameEngine {
             this.raceStartTime += pausedDuration;
             this.lapStartTime += pausedDuration;
             this.raceState = 'racing';
+            this.menuState = 'RACING';
             if (modal) modal.classList.add('hidden');
         }
+    }
+
+    returnToMainMenu() {
+        window.horizonAudio.playUiBack();
+        this.countdownTimers.forEach(t => clearTimeout(t));
+        this.countdownTimers = [];
+        this.loadingTimers.forEach(t => clearTimeout(t));
+        this.loadingTimers = [];
+
+        const countdownOverlay = document.getElementById('nfs-countdown-overlay');
+        if (countdownOverlay) countdownOverlay.classList.add('hidden');
+
+        this.hidePauseModal();
+        this.hideFinishModal();
+        this.prepareStartingGrid();
+        if (this.currentCarConfig) {
+            window.horizonAudio.updateEngine(1050, this.currentCarConfig.physics.redlineRpm, false, false, this.currentCarConfig.physics.engineBaseFreq, true, null);
+        }
+        this.navigateTo('MAIN_MENU');
     }
 
     updateCamera(dt) {
         if (!this.playerCarMesh) return;
 
         const safeDt = Math.max(0.001, Math.min(0.05, dt));
+
+        // MODO SHOWROOM / MENÚ 3D CINEMATOGRÁFICO (WELCOME, MAIN_MENU, CAR_SELECTION, TRACK_SELECTION, RACE_SETUP)
+        if (this.raceState === 'garage') {
+            const nowSec = performance.now() * 0.001;
+            this.world.updateShowroomLights(this.carPos, nowSec, true);
+
+            if (this.menuState === 'CAR_SELECTION') {
+                if (this.turntableAutoRotate && !this.isDraggingTurntable) {
+                    this.turntableAngle += safeDt * 0.52;
+                }
+                this.playerCarMesh.rotation.set(0, this.carHeading + this.turntableAngle, 0);
+                const wheels = this.playerCarMesh.userData.wheels;
+                if (wheels && wheels.length >= 2) {
+                    wheels[0].rotation.y = 0.28;
+                    wheels[1].rotation.y = 0.28;
+                }
+
+                const camAngle = this.carHeading + 0.55;
+                const radius = 5.4;
+                this.camera.position.set(
+                    this.carPos.x + Math.sin(camAngle) * radius,
+                    this.carPos.y + 1.82,
+                    this.carPos.z + Math.cos(camAngle) * radius
+                );
+                // Apuntar ligeramente debajo del auto para que el vehículo 3D luzca en la parte superior del visor del garaje
+                this.camera.lookAt(this.carPos.x, this.carPos.y + 0.35, this.carPos.z);
+            } else {
+                this.showroomOrbitAngle += safeDt * (this.menuState === 'WELCOME' ? 0.24 : 0.16);
+                this.playerCarMesh.rotation.set(0, this.carHeading, 0);
+                const orbitYaw = this.carHeading + Math.sin(this.showroomOrbitAngle) * 0.68 + 0.52;
+                const radius = this.menuState === 'WELCOME' ? 6.1 : 6.5;
+                const height = this.menuState === 'WELCOME' ? 1.65 : 1.95;
+
+                this.camera.position.set(
+                    this.carPos.x + Math.sin(orbitYaw) * radius,
+                    this.carPos.y + height,
+                    this.carPos.z + Math.cos(orbitYaw) * radius
+                );
+                this.camera.lookAt(this.carPos.x, this.carPos.y + 0.82, this.carPos.z);
+            }
+
+            if (Math.abs(this.camera.fov - 56) > 0.05) {
+                this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, 56, 1.0 - Math.exp(-safeDt * 8.0));
+                this.camera.updateProjectionMatrix();
+            }
+            return;
+        }
+
+        this.world.updateShowroomLights(this.carPos, 0, false);
 
         // Seguimiento angular y vertical en el marco de referencia del vehículo (cero jitter longitudinal por variación de dt)
         let angleDiff = this.carHeading - this.camHeading;
@@ -1265,18 +1528,413 @@ class HorizonGameEngine {
         ctx.stroke();
     }
 
+    hideAllMenuScreens() {
+        ['welcome-screen', 'main-menu-screen', 'festival-modal', 'loading-screen'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('hidden');
+        });
+    }
+
+    // Máquina de Estados de Navegación:
+    // WELCOME -> MAIN_MENU -> CAR_SELECTION -> TRACK_SELECTION -> RACE_SETUP -> LOADING -> RACING
+    navigateTo(targetState) {
+        this.menuState = targetState;
+
+        const welcomeEl = document.getElementById('welcome-screen');
+        const mainMenuEl = document.getElementById('main-menu-screen');
+        const festivalModalEl = document.getElementById('festival-modal');
+        const loadingEl = document.getElementById('loading-screen');
+        const hudEl = document.getElementById('hud-overlay');
+
+        this.hideAllMenuScreens();
+
+        if (targetState === 'WELCOME') {
+            this.raceState = 'garage';
+            if (hudEl) hudEl.classList.add('hidden');
+            if (welcomeEl) welcomeEl.classList.remove('hidden');
+            window.horizonAudio.setMenuMusicContext('welcome');
+            this.updateMenuSummaries();
+            return;
+        }
+
+        if (targetState === 'MAIN_MENU') {
+            this.raceState = 'garage';
+            if (hudEl) hudEl.classList.add('hidden');
+            if (mainMenuEl) mainMenuEl.classList.remove('hidden');
+            window.horizonAudio.setMenuMusicContext('main_menu');
+            this.updateMenuSummaries();
+            return;
+        }
+
+        if (targetState === 'LOADING') {
+            this.raceState = 'garage';
+            if (hudEl) hudEl.classList.add('hidden');
+            if (loadingEl) loadingEl.classList.remove('hidden');
+            window.horizonAudio.setMenuMusicContext('main_menu');
+            return;
+        }
+
+        // Estados alojados en el contenedor multipaso #festival-modal:
+        // CAR_SELECTION, TRACK_SELECTION, RACE_SETUP, OPTIONS, CREDITS
+        this.raceState = 'garage';
+        if (hudEl) hudEl.classList.add('hidden');
+        if (festivalModalEl) festivalModalEl.classList.remove('hidden');
+
+        const stepPanels = {
+            CAR_SELECTION: 'step-car-selection',
+            TRACK_SELECTION: 'step-track-selection',
+            RACE_SETUP: 'step-race-setup',
+            OPTIONS: 'step-options',
+            CREDITS: 'step-credits'
+        };
+
+        Object.entries(stepPanels).forEach(([stateKey, panelId]) => {
+            const panel = document.getElementById(panelId);
+            if (panel) {
+                panel.classList.toggle('hidden', stateKey !== targetState);
+            }
+        });
+
+        const titleEl = document.getElementById('festival-modal-title');
+        const subEl = document.getElementById('festival-modal-subtitle');
+        const wizardBar = document.getElementById('wizard-steps-bar');
+
+        const titles = {
+            CAR_SELECTION: ['1. GARAJE 3D Y SELECCIÓN DE AUTOMÓVIL', 'Rota el modelo 3D 360°, personaliza pintura/tuning y confirma tu vehículo'],
+            TRACK_SELECTION: ['2. SELECCIÓN DE CIRCUITO OFICIAL (5 ESCENARIOS)', 'Elige entre Tokio, Hakone, Shibuya y los Autódromos del Perú'],
+            RACE_SETUP: ['3. CONFIGURACIÓN DE CARRERA', 'Revisa modo de juego, dificultad de los 6 rivales y lanza el evento'],
+            OPTIONS: ['⚙️ OPCIONES DE AUDIO, RADIO Y GRÁFICOS WEBGL', 'Ajusta volumen general, música, efectos, silencio y calidad visual'],
+            CREDITS: ['🏆 CRÉDITOS OFICIALES DEL PROYECTO', 'Ingeniería Gráfica 3D, Física Simcade y Audio WebGL']
+        };
+
+        if (titleEl && titles[targetState]) titleEl.textContent = titles[targetState][0];
+        if (subEl && titles[targetState]) subEl.textContent = titles[targetState][1];
+
+        if (wizardBar) {
+            const isWizardStep = ['CAR_SELECTION', 'TRACK_SELECTION', 'RACE_SETUP'].includes(targetState);
+            wizardBar.classList.toggle('hidden', !isWizardStep);
+            wizardBar.querySelectorAll('.wizard-step-pill').forEach((pill) => {
+                pill.classList.toggle('active', pill.getAttribute('data-target-state') === targetState);
+            });
+        }
+
+        window.horizonAudio.setMenuMusicContext(targetState === 'CAR_SELECTION' ? 'garage' : 'main_menu');
+        this.updateGarageLiveSpecs();
+        this.updateMenuSummaries();
+    }
+
+    navigateBack() {
+        window.horizonAudio.playUiBack();
+        if (this.menuState === 'RACE_SETUP') {
+            this.navigateTo('TRACK_SELECTION');
+        } else if (this.menuState === 'TRACK_SELECTION') {
+            this.navigateTo('CAR_SELECTION');
+        } else if (this.menuState === 'CAR_SELECTION' || this.menuState === 'CREDITS') {
+            this.navigateTo('MAIN_MENU');
+        } else if (this.menuState === 'OPTIONS') {
+            if (this.optionsOriginState === 'PAUSED') {
+                this.hideAllMenuScreens();
+                const hudEl = document.getElementById('hud-overlay');
+                if (hudEl) hudEl.classList.remove('hidden');
+                this.raceState = 'paused';
+                this.menuState = 'PAUSED';
+                const pauseModal = document.getElementById('pause-modal');
+                if (pauseModal) pauseModal.classList.remove('hidden');
+            } else {
+                this.navigateTo('MAIN_MENU');
+            }
+        } else if (this.menuState === 'MAIN_MENU') {
+            this.navigateTo('WELCOME');
+        }
+    }
+
+    updateGarageLiveSpecs() {
+        const car = window.FH6_DATA.cars[this.selectedCarIndex];
+        const tuning = window.FH6_DATA.tuningStages[this.selectedTuningIndex] || window.FH6_DATA.tuningStages[0];
+        if (!car) return;
+
+        const setTxt = (id, txt) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = txt;
+        };
+        const setBar = (id, pct) => {
+            const el = document.getElementById(id);
+            if (el) el.style.width = `${Math.min(100, Math.round(pct))}%`;
+        };
+
+        const tunedSpeed = car.physics.maxSpeedKmh + tuning.speedBonus;
+        setTxt('garage-spec-year', String(car.year));
+        setTxt('garage-spec-name', car.name);
+        setTxt('garage-spec-category', car.category);
+        setTxt('garage-spec-class', car.classRating);
+        setTxt('garage-spec-desc', car.description);
+        setTxt('garage-spec-topspeed', `${tunedSpeed} KM/H`);
+        setTxt('garage-spec-rpm', `${car.physics.redlineRpm} RPM`);
+        setTxt('garage-spec-mass', `${car.physics.mass} KG`);
+        setTxt('garage-spec-gears', `${car.physics.gears} VEL`);
+
+        const spStat = Math.min(100, car.stats.speed + Math.round(tuning.speedBonus * 0.35));
+        const acStat = Math.min(100, Math.round(car.stats.acceleration * tuning.accelMult));
+        const hdStat = Math.min(100, Math.round(car.stats.handling * tuning.handlingMult));
+        const drStat = Math.min(100, car.stats.drift + Math.round(tuning.driftBonus * 100));
+
+        setTxt('garage-bar-speed-val', String(spStat));
+        setTxt('garage-bar-accel-val', String(acStat));
+        setTxt('garage-bar-handling-val', String(hdStat));
+        setTxt('garage-bar-drift-val', String(drStat));
+
+        setBar('garage-bar-speed', spStat);
+        setBar('garage-bar-accel', acStat);
+        setBar('garage-bar-handling', hdStat);
+        setBar('garage-bar-drift', drStat);
+    }
+
+    updateMenuSummaries() {
+        const car = window.FH6_DATA.cars[this.selectedCarIndex];
+        const map = window.FH6_DATA.maps[this.selectedMapIndex];
+        const mode = window.FH6_DATA.gameModes[this.selectedGameModeIndex];
+        const diff = window.FH6_DATA.difficulties[this.selectedDifficultyIndex];
+        const tuning = window.FH6_DATA.tuningStages[this.selectedTuningIndex];
+
+        const setTxt = (id, txt) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = txt;
+        };
+
+        if (car) {
+            setTxt('welcome-showcase-car', car.name);
+            setTxt('menu-active-car-name', car.name);
+            setTxt('menu-active-car-class', car.classRating);
+            setTxt('menu-active-car-cat', car.category);
+            setTxt('setup-summary-car-name', car.name);
+            const tunedTopSpeed = car.physics.maxSpeedKmh + (tuning ? tuning.speedBonus : 0);
+            setTxt('setup-summary-car-specs', `Clase ${car.classRating} • ${tunedTopSpeed} km/h • ${car.category}`);
+        }
+        if (tuning) {
+            setTxt('setup-summary-car-tuning', `${tuning.name} (+${tuning.speedBonus} km/h)`);
+        }
+        if (map) {
+            setTxt('menu-active-map-name', map.name);
+            setTxt('setup-summary-map-name', map.name);
+            setTxt('setup-summary-map-meta', `${map.lengthKm} • ${map.difficulty}`);
+            const summaryImg = document.getElementById('setup-summary-map-img');
+            if (summaryImg && this.world && typeof this.world.generateCircuitPreviewDataUrl === 'function') {
+                summaryImg.src = this.world.generateCircuitPreviewDataUrl(map);
+            }
+        }
+        if (mode && diff) {
+            setTxt('menu-active-mode-name', `${mode.name} • IA: ${diff.name}`);
+        }
+
+        document.querySelectorAll('#gamemode-cards-row .setup-option-pill').forEach((btn, idx) => {
+            btn.classList.toggle('active', idx === this.selectedGameModeIndex);
+        });
+        document.querySelectorAll('#difficulty-cards-row .setup-option-pill').forEach((btn, idx) => {
+            btn.classList.toggle('active', idx === this.selectedDifficultyIndex);
+        });
+    }
+
     toggleGarageModal(forceState) {
         const modal = document.getElementById('festival-modal');
         if (!modal) return;
         const shouldOpen = typeof forceState === 'boolean' ? forceState : modal.classList.contains('hidden');
-        modal.classList.toggle('hidden', !shouldOpen);
         if (shouldOpen) {
             this.hidePauseModal();
-            this.raceState = 'garage';
+            this.navigateTo('CAR_SELECTION');
+        } else {
+            modal.classList.add('hidden');
         }
     }
 
     setupUIEvents() {
+        const canonicalMapHeaders = {
+            tokyo_shuto: 'TOKIO — SHUTO C1 & WANGAN',
+            hakone_touge: 'HAKONE — MONTE FUJI',
+            shibuya_neon: 'SHIBUYA — AKIHABARA',
+            peru_arequipa_trujillo: 'PERÚ — AREQUIPA Y TRUJILLO',
+            peru_cusco_puno: 'PERÚ — CUSCO Y PUNO'
+        };
+
+        // 0. Botón PULSA START en Pantalla de Bienvenida (WELCOME -> MAIN_MENU)
+        const pressStartBtn = document.getElementById('btn-press-start');
+        if (pressStartBtn) {
+            pressStartBtn.addEventListener('click', () => {
+                window.horizonAudio.init();
+                window.horizonAudio.playUiConfirm();
+                this.navigateTo('MAIN_MENU');
+            });
+        }
+
+        // Botones del Menú Principal (JUGAR, GARAJE, OPCIONES, CRÉDITOS)
+        const bindMenuNavBtn = (id, targetState, isOptions = false) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.addEventListener('mouseenter', () => window.horizonAudio.playUiHover());
+            btn.addEventListener('click', () => {
+                window.horizonAudio.init();
+                window.horizonAudio.playUiConfirm();
+                if (isOptions) this.optionsOriginState = 'MAIN_MENU';
+                this.navigateTo(targetState);
+            });
+        };
+        bindMenuNavBtn('btn-menu-play', 'CAR_SELECTION');
+        bindMenuNavBtn('btn-menu-garage', 'CAR_SELECTION');
+        bindMenuNavBtn('btn-menu-options', 'OPTIONS', true);
+        bindMenuNavBtn('btn-menu-credits', 'CREDITS');
+
+        const quickRaceBtn = document.getElementById('btn-menu-quick-race');
+        if (quickRaceBtn) {
+            quickRaceBtn.addEventListener('click', () => this.launchRaceWithLoading());
+        }
+
+        // Navegación del Wizard y Botón Atrás
+        const backBtn = document.getElementById('btn-menu-back');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => this.navigateBack());
+        }
+
+        document.querySelectorAll('.wizard-step-pill').forEach((pill) => {
+            pill.addEventListener('click', () => {
+                const target = pill.getAttribute('data-target-state');
+                if (target) {
+                    window.horizonAudio.playUiConfirm();
+                    this.navigateTo(target);
+                }
+            });
+        });
+
+        const confirmCarBtn = document.getElementById('btn-confirm-car');
+        if (confirmCarBtn) {
+            confirmCarBtn.addEventListener('click', () => {
+                window.horizonAudio.playUiConfirm();
+                if (this.currentCarConfig) {
+                    window.horizonAudio.playEngineRevPreview(this.currentCarConfig.physics.engineBaseFreq);
+                }
+                this.navigateTo('TRACK_SELECTION');
+            });
+        }
+
+        const garageReturnMenuBtn = document.getElementById('btn-garage-return-menu');
+        if (garageReturnMenuBtn) {
+            garageReturnMenuBtn.addEventListener('click', () => {
+                window.horizonAudio.playUiConfirm();
+                this.navigateTo('MAIN_MENU');
+            });
+        }
+
+        const backToCarsBtn = document.getElementById('btn-back-to-cars');
+        if (backToCarsBtn) {
+            backToCarsBtn.addEventListener('click', () => {
+                window.horizonAudio.playUiBack();
+                this.navigateTo('CAR_SELECTION');
+            });
+        }
+
+        const confirmTrackBtn = document.getElementById('btn-confirm-track');
+        if (confirmTrackBtn) {
+            confirmTrackBtn.addEventListener('click', () => {
+                window.horizonAudio.playUiConfirm();
+                this.navigateTo('RACE_SETUP');
+            });
+        }
+
+        const setupChangeCarBtn = document.getElementById('btn-setup-change-car');
+        if (setupChangeCarBtn) {
+            setupChangeCarBtn.addEventListener('click', () => this.navigateTo('CAR_SELECTION'));
+        }
+        const setupChangeTrackBtn = document.getElementById('btn-setup-change-track');
+        if (setupChangeTrackBtn) {
+            setupChangeTrackBtn.addEventListener('click', () => this.navigateTo('TRACK_SELECTION'));
+        }
+
+        // Controles del Visor 3D 360° en el Garaje
+        const turntableZone = document.getElementById('car-3d-turntable-zone');
+        if (turntableZone) {
+            const startDrag = (clientX) => {
+                this.isDraggingTurntable = true;
+                this.turntableAutoRotate = false;
+                this.turntableLastX = clientX;
+                const autoBtn = document.getElementById('btn-rotate-car-auto');
+                if (autoBtn) autoBtn.classList.remove('active');
+            };
+            const moveDrag = (clientX) => {
+                if (!this.isDraggingTurntable) return;
+                const dx = clientX - this.turntableLastX;
+                this.turntableLastX = clientX;
+                this.turntableAngle += dx * 0.012;
+            };
+            const endDrag = () => {
+                this.isDraggingTurntable = false;
+            };
+
+            turntableZone.addEventListener('mousedown', (e) => {
+                if (e.target.closest('button')) return;
+                startDrag(e.clientX);
+            });
+            window.addEventListener('mousemove', (e) => moveDrag(e.clientX));
+            window.addEventListener('mouseup', endDrag);
+
+            turntableZone.addEventListener('touchstart', (e) => {
+                if (e.target.closest('button') || !e.touches[0]) return;
+                startDrag(e.touches[0].clientX);
+            }, { passive: true });
+            turntableZone.addEventListener('touchmove', (e) => {
+                if (!e.touches[0]) return;
+                moveDrag(e.touches[0].clientX);
+            }, { passive: true });
+            turntableZone.addEventListener('touchend', endDrag);
+        }
+
+        const rotLeftBtn = document.getElementById('btn-rotate-car-left');
+        if (rotLeftBtn) {
+            rotLeftBtn.addEventListener('click', () => {
+                this.turntableAutoRotate = false;
+                this.turntableAngle -= 0.45;
+                document.getElementById('btn-rotate-car-auto')?.classList.remove('active');
+            });
+        }
+        const rotRightBtn = document.getElementById('btn-rotate-car-right');
+        if (rotRightBtn) {
+            rotRightBtn.addEventListener('click', () => {
+                this.turntableAutoRotate = false;
+                this.turntableAngle += 0.45;
+                document.getElementById('btn-rotate-car-auto')?.classList.remove('active');
+            });
+        }
+        const rotAutoBtn = document.getElementById('btn-rotate-car-auto');
+        if (rotAutoBtn) {
+            rotAutoBtn.addEventListener('click', () => {
+                this.turntableAutoRotate = !this.turntableAutoRotate;
+                rotAutoBtn.classList.toggle('active', this.turntableAutoRotate);
+            });
+        }
+        const prevCar3dBtn = document.getElementById('btn-prev-car-3d');
+        if (prevCar3dBtn) {
+            prevCar3dBtn.addEventListener('click', () => {
+                const total = window.FH6_DATA.cars.length;
+                const nextIdx = (this.selectedCarIndex - 1 + total) % total;
+                this.loadPlayerCar(nextIdx);
+                window.horizonAudio.playEngineRevPreview(this.currentCarConfig.physics.engineBaseFreq);
+            });
+        }
+        const nextCar3dBtn = document.getElementById('btn-next-car-3d');
+        if (nextCar3dBtn) {
+            nextCar3dBtn.addEventListener('click', () => {
+                const total = window.FH6_DATA.cars.length;
+                const nextIdx = (this.selectedCarIndex + 1) % total;
+                this.loadPlayerCar(nextIdx);
+                window.horizonAudio.playEngineRevPreview(this.currentCarConfig.physics.engineBaseFreq);
+            });
+        }
+        const revEngineBtn = document.getElementById('btn-rev-car-engine');
+        if (revEngineBtn) {
+            revEngineBtn.addEventListener('click', () => {
+                if (this.currentCarConfig) {
+                    window.horizonAudio.playEngineRevPreview(this.currentCarConfig.physics.engineBaseFreq);
+                }
+            });
+        }
+
         // 1. Renderizar los 8 Autos JDM
         const carsGrid = document.getElementById('cars-selector-grid');
         if (carsGrid) {
@@ -1300,32 +1958,48 @@ class HorizonGameEngine {
                         <div class="stat-row"><span>DERRAPE (DRIFT)</span><div class="stat-bar"><div style="width:${car.stats.drift}%"></div></div></div>
                     </div>
                 `;
+                card.addEventListener('mouseenter', () => window.horizonAudio.playUiHover());
                 card.addEventListener('click', () => {
                     window.horizonAudio.init();
+                    window.horizonAudio.playEngineRevPreview(car.physics.engineBaseFreq);
                     this.loadPlayerCar(idx);
                 });
                 carsGrid.appendChild(card);
             });
         }
 
-        // 2. Renderizar los 3 Mapas
+        // 2. Renderizar los 5 Circuitos Oficiales con Imagen Previa Real
         const mapsGrid = document.getElementById('maps-selector-grid');
         if (mapsGrid) {
             mapsGrid.innerHTML = '';
             window.FH6_DATA.maps.forEach((map, idx) => {
+                const previewUrl = this.world.generateCircuitPreviewDataUrl(map);
+                const regionHeader = canonicalMapHeaders[map.id] || map.badge;
                 const card = document.createElement('div');
                 card.className = `map-card ${idx === this.selectedMapIndex ? 'active' : ''}`;
+                card.setAttribute('data-map-id', map.id);
                 card.innerHTML = `
-                    <div class="map-badge">${map.badge}</div>
-                    <h4>${map.name}</h4>
-                    <p>${map.subtitle}</p>
-                    <div class="map-meta">
-                        <span>📏 ${map.lengthKm}</span>
-                        <span>🔥 ${map.difficulty}</span>
+                    <div class="map-card-preview-wrap">
+                        <img class="map-card-preview-img" src="${previewUrl}" alt="${map.name}" />
+                    </div>
+                    <div class="map-card-body">
+                        <div class="map-region-title">${regionHeader}</div>
+                        <div class="map-badge">${map.badge}</div>
+                        <h4>${map.name}</h4>
+                        <p>${map.subtitle}</p>
+                        <div class="map-meta">
+                            <span>📏 ${map.lengthKm}</span>
+                            <span>🔥 ${map.difficulty}</span>
+                        </div>
+                        <button type="button" class="btn-select-map">
+                            ${idx === this.selectedMapIndex ? '✓ CIRCUITO SELECCIONADO' : 'SELECCIONAR CIRCUITO'}
+                        </button>
                     </div>
                 `;
+                card.addEventListener('mouseenter', () => window.horizonAudio.playUiHover());
                 card.addEventListener('click', () => {
                     window.horizonAudio.init();
+                    window.horizonAudio.playUiConfirm();
                     this.loadMap(idx);
                 });
                 mapsGrid.appendChild(card);
@@ -1334,35 +2008,75 @@ class HorizonGameEngine {
 
         // 3. Selector de las 4 Dificultades (Baja, Media, Alta, Muy Alta)
         const diffSelect = document.getElementById('difficulty-select');
+        const diffCardsRow = document.getElementById('difficulty-cards-row');
         if (diffSelect) {
             diffSelect.innerHTML = '';
+            if (diffCardsRow) diffCardsRow.innerHTML = '';
             window.FH6_DATA.difficulties.forEach((d, idx) => {
                 const opt = document.createElement('option');
                 opt.value = String(idx);
                 opt.textContent = `Dificultad: ${d.name}`;
                 diffSelect.appendChild(opt);
+
+                if (diffCardsRow) {
+                    const pill = document.createElement('button');
+                    pill.type = 'button';
+                    pill.className = `setup-option-pill ${idx === this.selectedDifficultyIndex ? 'active' : ''}`;
+                    pill.textContent = d.name;
+                    pill.addEventListener('click', () => {
+                        window.horizonAudio.playUiConfirm();
+                        this.selectedDifficultyIndex = idx;
+                        diffSelect.value = String(idx);
+                        this.prepareStartingGrid();
+                        this.updateMenuSummaries();
+                        this.saveUserPreferences();
+                    });
+                    diffCardsRow.appendChild(pill);
+                }
             });
             diffSelect.value = String(this.selectedDifficultyIndex);
             diffSelect.addEventListener('change', (e) => {
                 this.selectedDifficultyIndex = parseInt(e.target.value, 10);
                 this.prepareStartingGrid();
+                this.updateMenuSummaries();
+                this.saveUserPreferences();
             });
         }
 
         // 4. Selector de los 3 Modos de Juego (Carrera 3 Vueltas, Checkpoints, Persecución Policial)
         const modeSelect = document.getElementById('gamemode-select');
+        const modeCardsRow = document.getElementById('gamemode-cards-row');
         if (modeSelect) {
             modeSelect.innerHTML = '';
+            if (modeCardsRow) modeCardsRow.innerHTML = '';
             window.FH6_DATA.gameModes.forEach((m, idx) => {
                 const opt = document.createElement('option');
                 opt.value = String(idx);
                 opt.textContent = m.name;
                 modeSelect.appendChild(opt);
+
+                if (modeCardsRow) {
+                    const pill = document.createElement('button');
+                    pill.type = 'button';
+                    pill.className = `setup-option-pill ${idx === this.selectedGameModeIndex ? 'active' : ''}`;
+                    pill.textContent = m.shortName;
+                    pill.addEventListener('click', () => {
+                        window.horizonAudio.playUiConfirm();
+                        this.selectedGameModeIndex = idx;
+                        modeSelect.value = String(idx);
+                        this.prepareStartingGrid();
+                        this.updateMenuSummaries();
+                        this.saveUserPreferences();
+                    });
+                    modeCardsRow.appendChild(pill);
+                }
             });
             modeSelect.value = String(this.selectedGameModeIndex);
             modeSelect.addEventListener('change', (e) => {
                 this.selectedGameModeIndex = parseInt(e.target.value, 10);
                 this.prepareStartingGrid();
+                this.updateMenuSummaries();
+                this.saveUserPreferences();
             });
         }
 
@@ -1379,6 +2093,9 @@ class HorizonGameEngine {
             tuningSelect.value = String(this.selectedTuningIndex);
             tuningSelect.addEventListener('change', (e) => {
                 this.selectedTuningIndex = parseInt(e.target.value, 10);
+                this.updateGarageLiveSpecs();
+                this.updateMenuSummaries();
+                this.saveUserPreferences();
             });
         }
 
@@ -1400,6 +2117,12 @@ class HorizonGameEngine {
                 this.currentCarConfig.rimColor = parseInt(rimHex.replace('#', ''), 16);
                 this.playerCarMesh.userData.rimMat.color.set(rimHex);
             }
+            this.customCarColors[this.currentCarConfig.id] = {
+                color: this.currentCarConfig.color,
+                neonColor: this.currentCarConfig.neonColor,
+                rimColor: this.currentCarConfig.rimColor
+            };
+            this.saveUserPreferences();
         };
 
         ['tuning-body-color', 'tuning-neon-color', 'tuning-rim-color'].forEach(id => {
@@ -1407,7 +2130,7 @@ class HorizonGameEngine {
             if (el) el.addEventListener('input', applyCustomColors);
         });
 
-        // 6. Radio Horizon Japón
+        // 6. Radio Horizon Japón y Controlador Central de Audio
         window.populateTrackSelectors = () => {
             const selects = document.querySelectorAll('.js-track-select');
             selects.forEach(sel => {
@@ -1439,11 +2162,34 @@ class HorizonGameEngine {
         document.querySelectorAll('.js-play-toggle').forEach(btn => {
             btn.addEventListener('click', () => window.horizonAudio.togglePlayPause());
         });
+        document.querySelectorAll('.js-mute-toggle').forEach(btn => {
+            btn.addEventListener('click', () => {
+                window.horizonAudio.init();
+                window.horizonAudio.toggleMute();
+            });
+        });
+
+        const masterSlider = document.getElementById('master-volume-slider');
+        if (masterSlider) {
+            masterSlider.value = String(window.horizonAudio.masterVolume);
+            masterSlider.addEventListener('input', (e) => {
+                window.horizonAudio.setMasterVolume(e.target.value);
+            });
+        }
 
         const volSlider = document.getElementById('music-volume-slider');
         if (volSlider) {
+            volSlider.value = String(window.horizonAudio.musicVolume);
             volSlider.addEventListener('input', (e) => {
                 window.horizonAudio.setMusicVolume(e.target.value);
+            });
+        }
+
+        const sfxSlider = document.getElementById('sfx-volume-slider');
+        if (sfxSlider) {
+            sfxSlider.value = String(window.horizonAudio.sfxVolume);
+            sfxSlider.addEventListener('input', (e) => {
+                window.horizonAudio.setSfxVolume(e.target.value);
             });
         }
 
@@ -1454,7 +2200,7 @@ class HorizonGameEngine {
             });
         }
 
-        // Botones de inicio y control
+        // Botones de inicio, pausa y control
         const openGarageBtn = document.getElementById('btn-open-garage');
         if (openGarageBtn) {
             openGarageBtn.addEventListener('click', () => this.toggleGarageModal(true));
@@ -1462,7 +2208,7 @@ class HorizonGameEngine {
 
         const startDrivingBtn = document.getElementById('btn-start-driving');
         if (startDrivingBtn) {
-            startDrivingBtn.addEventListener('click', () => this.startNewRace());
+            startDrivingBtn.addEventListener('click', () => this.launchRaceWithLoading());
         }
 
         const restartFinishBtn = document.getElementById('btn-finish-restart');
@@ -1474,8 +2220,13 @@ class HorizonGameEngine {
         if (garageFinishBtn) {
             garageFinishBtn.addEventListener('click', () => {
                 this.hideFinishModal();
-                this.toggleGarageModal(true);
+                this.navigateTo('CAR_SELECTION');
             });
+        }
+
+        const finishMainMenuBtn = document.getElementById('btn-finish-main-menu');
+        if (finishMainMenuBtn) {
+            finishMainMenuBtn.addEventListener('click', () => this.returnToMainMenu());
         }
 
         const camBtn = document.getElementById('btn-camera-toggle');
@@ -1505,12 +2256,26 @@ class HorizonGameEngine {
             pauseRestartBtn.addEventListener('click', () => this.startNewRace());
         }
 
+        const pauseOptionsBtn = document.getElementById('btn-pause-options');
+        if (pauseOptionsBtn) {
+            pauseOptionsBtn.addEventListener('click', () => {
+                this.optionsOriginState = 'PAUSED';
+                this.hidePauseModal();
+                this.navigateTo('OPTIONS');
+            });
+        }
+
         const pauseGarageBtn = document.getElementById('btn-pause-garage');
         if (pauseGarageBtn) {
             pauseGarageBtn.addEventListener('click', () => {
                 this.hidePauseModal();
-                this.toggleGarageModal(true);
+                this.navigateTo('CAR_SELECTION');
             });
+        }
+
+        const pauseMainMenuBtn = document.getElementById('btn-pause-main-menu');
+        if (pauseMainMenuBtn) {
+            pauseMainMenuBtn.addEventListener('click', () => this.returnToMainMenu());
         }
 
         const touchToggleBtn = document.getElementById('btn-toggle-touch');
@@ -1526,6 +2291,7 @@ class HorizonGameEngine {
             qualitySelect.value = this.qualityPreset;
             qualitySelect.addEventListener('change', (e) => {
                 this.applyQualityPreset(e.target.value);
+                this.saveUserPreferences();
             });
         }
     }
