@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#050811" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Forza Horizon 6: Japan WebGL Edition | Tokio & Hakone</title>
+    <link rel="manifest" href="manifest.json" />
+    <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+    <!-- Lienzo 3D WebGL / WebGPU con Iluminación ACES Filmic & Reflejos Metálicos -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Semáforo de Salida Cinematográfico Estilo Need For Speed ("PREPARADOS", "LISTOS", "¡VAMOS!") -->
+    <div id="nfs-countdown-overlay" class="hidden">
+        <div id="nfs-countdown-text" class="nfs-countdown-word stage-ready">PREPARADOS</div>
+        <div id="nfs-countdown-sub">PARRILLA DE 7 AUTOS • ACELERA PARA REVOLUCIONAR</div>
+    </div>
+
+    <!-- HUD Superpuesto de Telemetría, Posición de Carrera, Mapa y Radio -->
+    <div id="hud-overlay">
+        <div class="hud-top-bar">
+            <!-- Información del Mapa, Posición (1/7), Vuelta (1/3) y Cronómetro -->
+            <div class="hud-location-box hud-interactive">
+                <div class="hud-brand-tag">
+                    <span>HORIZON JAPAN 6</span>
+                    <span id="hud-fps" class="badge-pill">60 FPS</span>
+                    <span id="quality-badge" class="badge-pill">ULTRA HDR PC</span>
+                </div>
+                <div id="hud-map-name">Tokio: Autopista Shuto C1 & Wangan</div>
+                <div id="hud-map-subtitle">CARRERA 3 VUELTAS • Dificultad: Media (Estándar)</div>
+                <div class="hud-lap-row">
+                    <span id="hud-race-pos" class="badge-pos">POS 7 / 7</span>
+                    <span id="hud-lap-num">VUELTA 1 / 3</span>
+                    <span id="hud-lap-time">00:00.0</span>
+                    <span id="hud-cp-timer" class="hidden">⏱️ CHECKPOINT: 28.0s</span>
+                    <span>DRIFT: <strong id="hud-total-score" style="color:#00e5ff;">0</strong></span>
+                </div>
+            </div>
+
+            <!-- Banner Central Dinámico de Cadena de Derrape -->
+            <div id="drift-skill-banner" class="hidden">
+                <div class="drift-title">🔥 DERRAPE ENCADENADO JDM 🔥</div>
+                <div id="drift-chain-points">1,250 PTS × 2.0x</div>
+            </div>
+
+            <!-- Reproductor de Radio Horizon Japón + Botones Rápidos -->
+            <div class="hud-right-stack hud-interactive">
+                <div class="radio-widget">
+                    <div class="radio-header">
+                        <span class="radio-station-badge">📻 RADIO HORIZON JAPÓN • <span class="js-track-genre">Synthwave</span></span>
+                        <div class="eq-bars" aria-hidden="true">
+                            <div class="eq-bar"></div>
+                            <div class="eq-bar"></div>
+                            <div class="eq-bar"></div>
+                            <div class="eq-bar"></div>
+                            <div class="eq-bar"></div>
+                            <div class="eq-bar"></div>
+                            <div class="eq-bar"></div>
+                            <div class="eq-bar"></div>
+                        </div>
+                    </div>
+                    <div class="radio-track-info">
+                        <div class="js-track-title">Midnight Wangan Pulse</div>
+                        <div class="js-track-artist">Horizon Pulse Japan • Synthwave FM</div>
+                    </div>
+                    <div class="radio-controls-row">
+                        <button type="button" class="btn-icon js-prev-track" title="Canción Anterior">⏮</button>
+                        <button type="button" class="btn-icon js-play-toggle" title="Reproducir / Pausar">⏸</button>
+                        <button type="button" class="btn-icon js-next-track" title="Siguiente Canción (Tecla M)">⏭</button>
+                        <select class="track-select-compact js-track-select" aria-label="Elegir canción"></select>
+                    </div>
+                </div>
+
+                <div class="hud-quick-buttons">
+                    <button type="button" id="btn-open-garage" class="btn-hud-action primary">🏎️ Garaje / Tuning / Modos (G)</button>
+                    <button type="button" id="btn-camera-toggle" class="btn-hud-action">🎥 Cámara (C)</button>
+                    <button type="button" id="btn-reset-car" class="btn-hud-action">🏁 Reiniciar Salida (R)</button>
+                    <button type="button" id="btn-toggle-touch" class="btn-hud-action">📱 Controles Táctiles</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Barra Inferior: Mini-Mapa GPS y Velocímetro Digital -->
+        <div class="hud-bottom-bar">
+            <div class="minimap-box hud-interactive">
+                <canvas id="minimap-canvas" width="160" height="130"></canvas>
+                <span class="minimap-caption">GPS: 🔴 TÚ • 🟡 6 RIVALES • 🔵 POLICÍA</span>
+            </div>
+
+            <div class="speedometer-cluster hud-interactive">
+                <div class="car-badge-row">
+                    <span id="hud-car-name">Nissan Skyline GT-R V-Spec II (R34)</span>
+                    <span id="hud-car-class">S1 892</span>
+                </div>
+                <div class="speed-gear-row">
+                    <div class="speed-Main">
+                        <span id="hud-speed">000</span>
+                        <span class="speed-unit">KM/H</span>
+                    </div>
+                    <div id="hud-gear" class="gear-box">1</div>
+                </div>
+                <div class="rpm-bar-track">
+                    <div id="hud-rpm-fill"></div>
+                </div>
+                <div class="telemetry-sub-row">
+                    <span id="hud-rpm-text">1100 RPM</span>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span>NITRO</span>
+                        <div class="nitro-mini-track"><div id="hud-nitro-fill"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controles Táctiles en Pantalla para Android y Pantallas Táctiles -->
+    <div id="mobile-touch-controls" class="hidden">
+        <div id="joystick-zone" title="Desliza para girar el volante">
+            <div id="joystick-knob"></div>
+        </div>
+
+        <div class="mobile-pedals-zone">
+            <button type="button" id="btn-touch-drift" class="touch-pedal-btn drift">
+                <span>💨 DRIFT</span>
+                <small>Freno Mano</small>
+            </button>
+            <button type="button" id="btn-touch-nitro" class="touch-pedal-btn nitro">
+                <span>⚡ NITRO</span>
+                <small>Turbo</small>
+            </button>
+            <button type="button" id="btn-touch-brake" class="touch-pedal-btn brake">
+                <span>🛑 FRENO</span>
+                <small>Reversa</small>
+            </button>
+            <button type="button" id="btn-touch-gas" class="touch-pedal-btn gas">
+                <span>🔥 ACELERAR</span>
+                <small>Gas</small>
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal de Fin de Carrera (3 Vueltas Completadas / Podio) -->
+    <div id="finish-race-modal" class="hidden">
+        <div class="finish-card">
+            <h2 id="finish-title" style="font-size:24px;font-weight:900;color:#fff;">🏆 ¡CARRERA FINALIZADA!</h2>
+            <p style="font-size:13px;color:#94a3b8;margin-top:4px;">Resultados Oficiales de las 3 Vueltas en Japón</p>
+            <div class="finish-stats-grid">
+                <div class="finish-stat-box">
+                    <span>POSICIÓN FINAL</span>
+                    <strong id="finish-position">1º / 7</strong>
+                </div>
+                <div class="finish-stat-box">
+                    <span>TIEMPO TOTAL (3 VUELTAS)</span>
+                    <strong id="finish-total-time">02:45.4</strong>
+                </div>
+                <div class="finish-stat-box">
+                    <span>MEJOR VUELTA</span>
+                    <strong id="finish-best-lap">00:52.1</strong>
+                </div>
+                <div class="finish-stat-box">
+                    <span>PUNTOS DE ESTILO DRIFT</span>
+                    <strong id="finish-drift-score">12,400 PTS</strong>
+                </div>
+            </div>
+            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+                <button type="button" id="btn-finish-restart" class="btn-drive-now">🔄 Repetir Carrera en Línea de Salida</button>
+                <button type="button" id="btn-finish-garage" class="btn-hud-action" style="padding:12px 18px;font-size:13px;">🏎️ Ir al Garaje / Cambiar Auto</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Central del Festival Horizon Japón: 8 Autos, Tuning, 4 Dificultades, 3 Modos y Música -->
+    <div id="festival-modal">
+        <div class="festival-container">
+            <div class="festival-header">
+                <div class="festival-title-block">
+                    <h1>FORZA HORIZON 6: JAPAN WEBGL EDITION</h1>
+                    <p>8 Autos JDM Personalizables • Parrilla de 7 Competidores con Colisiones Reales • 3 Vueltas • PC & Android</p>
+                </div>
+                <button type="button" id="btn-start-driving" class="btn-drive-now">🏁 ¡INICIAR CARRERA EN LÍNEA DE SALIDA!</button>
+            </div>
+
+            <!-- Barra de Configuración de Carrera: Modo de Juego, Dificultad (4 Niveles) y Etapa de Tuning -->
+            <div class="race-config-bar">
+                <div class="config-field">
+                    <label for="gamemode-select">🎮 MODO DE JUEGO (3 VUELTAS)</label>
+                    <select id="gamemode-select" class="track-select-compact" style="padding:8px;font-size:12px;"></select>
+                </div>
+                <div class="config-field">
+                    <label for="difficulty-select">🔥 DIFICULTAD DE LOS 6 RIVALES IA (4 NIVELES)</label>
+                    <select id="difficulty-select" class="track-select-compact" style="padding:8px;font-size:12px;"></select>
+                </div>
+                <div class="config-field">
+                    <label for="tuning-stage-select">🔧 PREPARACIÓN MECÁNICA / TUNING MOTOR</label>
+                    <select id="tuning-stage-select" class="track-select-compact" style="padding:8px;font-size:12px;"></select>
+                </div>
+            </div>
+
+            <!-- 1. Selección de los 8 Autos JDM -->
+            <div class="section-heading">🏎️ 1. Elige tu Vehículo (8 Leyendas JDM: Skyline, Supra, RX-7, Lancer Evo IX, Subaru STI 22B, 350Z, NSX-R, LFA)</div>
+            <div id="cars-selector-grid" class="cars-grid"></div>
+
+            <!-- 2. Selección de los 3 Mapas de Japón -->
+            <div class="section-heading">🗾 2. Elige el Circuito de Japón (3 Vueltas con Semáforo Need For Speed)</div>
+            <div id="maps-selector-grid" class="maps-grid"></div>
+
+            <!-- 3. Taller de Pintura/Tuning + Radio Horizon Japón + Ajustes WebGL -->
+            <div class="section-heading">🎨 3. Taller de Pintura Personalizada, Radio Musical y Gráficos</div>
+            <div class="music-settings-grid">
+                <!-- Tarjeta de Pintura y Colores en Tiempo Real -->
+                <div class="settings-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <strong style="font-size:13px;">🎨 Personalización Visual del Vehículo</strong>
+                        <span class="badge-pill">Reflejos HDR Cubemap</span>
+                    </div>
+                    <div class="tuning-colors-row">
+                        <label class="color-picker-item">
+                            <span>Carrocería</span>
+                            <input type="color" id="tuning-body-color" value="#0047ab" />
+                        </label>
+                        <label class="color-picker-item">
+                            <span>Neón Inferior</span>
+                            <input type="color" id="tuning-neon-color" value="#00e5ff" />
+                        </label>
+                        <label class="color-picker-item">
+                            <span>Llantas</span>
+                            <input type="color" id="tuning-rim-color" value="#d4af37" />
+                        </label>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+                        <span style="font-size:12px;color:#cbd5e1;">Calidad Gráfica WebGL:</span>
+                        <select id="quality-preset-select" class="track-select-compact" style="max-width:185px;padding:6px;">
+                            <option value="high">Calidad Ultra HDR (PC)</option>
+                            <option value="balanced">Equilibrado (60 FPS)</option>
+                            <option value="mobile">Optimización Móvil ASTC</option>
+                        </select>
+                    </div>
+                    <div class="controls-legend">
+                        <span><b class="key-chip">W / ↑</b> Acelerar</span>
+                        <span><b class="key-chip">S / ↓</b> Frenar</span>
+                        <span><b class="key-chip">A D / ← →</b> Girar</span>
+                        <span><b class="key-chip">ESPACIO</b> Drift</span>
+                        <span><b class="key-chip">SHIFT</b> Nitro</span>
+                        <span><b class="key-chip">C</b> Cámara</span>
+                        <span><b class="key-chip">R</b> Reiniciar Salida</span>
+                    </div>
+                </div>
+
+                <!-- Tarjeta de Radio y Subida de MP3 -->
+                <div class="settings-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <strong style="font-size:13px;">📻 Emisora Horizon Japón + Tus MP3</strong>
+                        <span class="badge-pill">WebAudio + MP3 Local</span>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <button type="button" class="btn-icon js-prev-track">⏮</button>
+                        <button type="button" class="btn-icon js-play-toggle">⏸</button>
+                        <button type="button" class="btn-icon js-next-track">⏭</button>
+                        <select class="track-select-compact js-track-select" style="padding:7px;"></select>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;font-size:12px;">
+                        <span>🔊 Volumen Música:</span>
+                        <input type="range" id="music-volume-slider" min="0" max="1" step="0.05" value="0.48" style="flex:1;" />
+                    </div>
+                    <label class="custom-file-label" for="custom-music-input">
+                        📂 Cargar Mis Canciones (.MP3 / .WAV / .OGG desde PC o Android)
+                    </label>
+                    <input type="file" id="custom-music-input" accept="audio/*" multiple class="hidden" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Motor 3D Three.js WebGL y Módulos del Juego -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/world.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>

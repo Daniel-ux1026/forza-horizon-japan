@@ -1,0 +1,10 @@
+{
+  "name": "Forza Horizon 6: Japan WebGL Edition",
+  "short_name": "FH6 Japan",
+  "description": "Juego de carreras simcade 3D en las calles de Japón (Tokio, Hakone y Shibuya) con 5 autos JDM y reproductor de música integrado.",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#050811",
+  "theme_color": "#f43f5e"
+}

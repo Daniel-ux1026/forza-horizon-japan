@@ -1,0 +1,8 @@
+{
+  "name": "forza-horizon-6-japan-webgl",
+  "version": "1.0.0",
+  "description": "Juego de conduccion simcade 3D en las calles de Japon (Tokio, Hakone, Shibuya) para PC y Android en navegador WebGL.",
+  "scripts": {
+    "start": "npx serve ."
+  }
+}

@@ -1,0 +1,424 @@
+// ============================================================================
+// FORZA HORIZON 6: JAPAN EDITION - 8 AUTOS JDM, 4 DIFICULTADES, 3 MODOS Y RADIO
+// ============================================================================
+
+window.FH6_DATA = {
+    difficulties: [
+        {
+            id: 'low',
+            name: 'Baja (Principiante)',
+            aiSpeedMult: 0.78,
+            aiAggression: 0.4,
+            checkpointBonusSec: 16,
+            policeCount: 1,
+            badgeColor: '#22c55e'
+        },
+        {
+            id: 'medium',
+            name: 'Media (Estándar)',
+            aiSpeedMult: 0.89,
+            aiAggression: 0.65,
+            checkpointBonusSec: 13,
+            policeCount: 2,
+            badgeColor: '#38bdf8'
+        },
+        {
+            id: 'high',
+            name: 'Alta (Experto)',
+            aiSpeedMult: 0.97,
+            aiAggression: 0.85,
+            checkpointBonusSec: 11,
+            policeCount: 3,
+            badgeColor: '#f59e0b'
+        },
+        {
+            id: 'very_high',
+            name: 'Muy Alta (Leyenda JDM)',
+            aiSpeedMult: 1.05,
+            aiAggression: 1.0,
+            checkpointBonusSec: 9.5,
+            policeCount: 4,
+            badgeColor: '#f43f5e'
+        }
+    ],
+
+    gameModes: [
+        {
+            id: 'circuit_race',
+            name: '🏁 Carrera Oficial (3 Vueltas vs 6 Rivales)',
+            shortName: 'CARRERA 3 VUELTAS',
+            description: 'Enfréntate a 6 competidores JDM desde la parrilla de salida con colisiones reales.'
+        },
+        {
+            id: 'checkpoint_time',
+            name: '⏱️ Contrarreloj por Checkpoints',
+            shortName: 'CHECKPOINTS RELOJ',
+            description: 'Cruza los arcos láser verdes antes de que el cronómetro llegue a 0.0s durante 3 vueltas.'
+        },
+        {
+            id: 'police_pursuit',
+            name: '🚨 Persecución Policial Nocturna (Tokyo Heat)',
+            shortName: 'PERSECUCIÓN POLICIAL',
+            description: 'Escapa de las patrullas de la Policía de Tokio con sirenas activas y gana la carrera de 3 vueltas.'
+        }
+    ],
+
+    tuningStages: [
+        { id: 'stage1', name: 'Stage 1: Serie / Street', speedBonus: 0, accelMult: 1.0, handlingMult: 1.0, driftBonus: 0 },
+        { id: 'stage2', name: 'Stage 2: Touge Drift Spec', speedBonus: 12, accelMult: 1.10, handlingMult: 1.12, driftBonus: 0.05 },
+        { id: 'stage3', name: 'Stage 3: Wangan Twin-Turbo', speedBonus: 28, accelMult: 1.22, handlingMult: 1.08, driftBonus: 0.02 }
+    ],
+
+    cars: [
+        {
+            id: 'r34',
+            name: 'Nissan Skyline GT-R V-Spec II (R34)',
+            category: 'JDM Legend • AWD Twin-Turbo',
+            year: 2002,
+            classRating: 'S1 892',
+            color: 0x0047ab,
+            secondaryColor: 0x111827,
+            rimColor: 0xd4af37,
+            neonColor: 0x00e5ff,
+            stats: { speed: 88, acceleration: 90, handling: 92, drift: 84 },
+            physics: {
+                maxSpeedKmh: 315,
+                accelForce: 40.5,
+                brakeForce: 58.0,
+                turnSpeed: 2.60,
+                gripNormal: 0.93,
+                gripDrift: 0.78,
+                redlineRpm: 8200,
+                gears: 6,
+                engineBaseFreq: 68,
+                mass: 1560
+            },
+            dimensions: { width: 1.92, height: 1.36, length: 4.60, spoilerType: 'gt_high', taillightStyle: 'quad_round', bodyStyle: 'coupe_boxy' },
+            description: 'El legendario "Godzilla" con tracción total ATTESA E-TS Pro y motor RB26DETT.'
+        },
+        {
+            id: 'rx7',
+            name: 'Mazda RX-7 Spirit R (FD3S)',
+            category: 'Touge Drift King • RWD Rotary',
+            year: 2002,
+            classRating: 'S1 885',
+            color: 0xffcc00,
+            secondaryColor: 0x0f172a,
+            rimColor: 0xe2e8f0,
+            neonColor: 0xff007f,
+            stats: { speed: 84, acceleration: 87, handling: 94, drift: 98 },
+            physics: {
+                maxSpeedKmh: 298,
+                accelForce: 38.5,
+                brakeForce: 59.0,
+                turnSpeed: 2.88,
+                gripNormal: 0.90,
+                gripDrift: 0.71,
+                redlineRpm: 9000,
+                gears: 6,
+                engineBaseFreq: 92,
+                mass: 1270
+            },
+            dimensions: { width: 1.88, height: 1.25, length: 4.35, spoilerType: 'curved_sport', taillightStyle: 'visor_strip', bodyStyle: 'sleek_rotary' },
+            description: 'Chasis ultraligero 50:50 con motor rotativo 13B-REW biturbo para derrapes precisos.'
+        },
+        {
+            id: 'supra',
+            name: 'Toyota Supra RZ (A80) 2JZ-GTE',
+            category: 'Wangan Monster • RWD Big Turbo',
+            year: 1998,
+            classRating: 'S1 900',
+            color: 0xdc2626,
+            secondaryColor: 0x18181b,
+            rimColor: 0xcbd5e1,
+            neonColor: 0xff5500,
+            stats: { speed: 96, acceleration: 91, handling: 83, drift: 91 },
+            physics: {
+                maxSpeedKmh: 342,
+                accelForce: 43.0,
+                brakeForce: 55.0,
+                turnSpeed: 2.48,
+                gripNormal: 0.91,
+                gripDrift: 0.74,
+                redlineRpm: 8000,
+                gears: 6,
+                engineBaseFreq: 62,
+                mass: 1510
+            },
+            dimensions: { width: 1.94, height: 1.31, length: 4.52, spoilerType: 'hoop_wing', taillightStyle: 'quad_pod', bodyStyle: 'gt_aero' },
+            description: 'Preparado para superar los 340 km/h en la autopista Bayshore Wangan de Tokio.'
+        },
+        {
+            id: 'evo9',
+            name: 'Mitsubishi Lancer Evolution IX MR',
+            category: 'Street Rally Icon • AWD 4G63T',
+            year: 2006,
+            classRating: 'S1 890',
+            color: 0xb91c1c,
+            secondaryColor: 0x09090b,
+            rimColor: 0x334155,
+            neonColor: 0xff2a55,
+            stats: { speed: 86, acceleration: 94, handling: 96, drift: 88 },
+            physics: {
+                maxSpeedKmh: 306,
+                accelForce: 42.5,
+                brakeForce: 62.0,
+                turnSpeed: 2.85,
+                gripNormal: 0.95,
+                gripDrift: 0.79,
+                redlineRpm: 7800,
+                gears: 6,
+                engineBaseFreq: 74,
+                mass: 1410
+            },
+            dimensions: { width: 1.89, height: 1.41, length: 4.49, spoilerType: 'gt_carbon', taillightStyle: 'quad_pod', bodyStyle: 'sedan_rally' },
+            description: 'Diferencial activo AYC y motor 4G63T turbo. Aceleración brutal y control total en curvas cerradas.'
+        },
+        {
+            id: 'sti22b',
+            name: 'Subaru Impreza WRX STI 22B',
+            category: 'Boxer Touge Legend • AWD Rally',
+            year: 1998,
+            classRating: 'S1 888',
+            color: 0x0284c7,
+            secondaryColor: 0x0f172a,
+            rimColor: 0xfacc15,
+            neonColor: 0x38bdf8,
+            stats: { speed: 85, acceleration: 93, handling: 95, drift: 90 },
+            physics: {
+                maxSpeedKmh: 302,
+                accelForce: 41.8,
+                brakeForce: 61.0,
+                turnSpeed: 2.82,
+                gripNormal: 0.94,
+                gripDrift: 0.77,
+                redlineRpm: 7900,
+                gears: 6,
+                engineBaseFreq: 58,
+                mass: 1270
+            },
+            dimensions: { width: 1.90, height: 1.38, length: 4.36, spoilerType: 'gt_high', taillightStyle: 'wide_bar', bodyStyle: 'coupe_boxy' },
+            description: 'Carrocería ensanchada de edición limitada con motor Boxer 2.2L turbo y llantas doradas BBS.'
+        },
+        {
+            id: 'z33',
+            name: 'Nissan Fairlady Z (350Z Nismo)',
+            category: 'Tokyo Drift Spec • RWD V6',
+            year: 2007,
+            classRating: 'S1 882',
+            color: 0xea580c,
+            secondaryColor: 0x111827,
+            rimColor: 0x1e293b,
+            neonColor: 0xfacc15,
+            stats: { speed: 89, acceleration: 88, handling: 90, drift: 96 },
+            physics: {
+                maxSpeedKmh: 312,
+                accelForce: 39.2,
+                brakeForce: 58.0,
+                turnSpeed: 2.75,
+                gripNormal: 0.91,
+                gripDrift: 0.72,
+                redlineRpm: 7600,
+                gears: 6,
+                engineBaseFreq: 72,
+                mass: 1470
+            },
+            dimensions: { width: 1.91, height: 1.31, length: 4.31, spoilerType: 'curved_sport', taillightStyle: 'visor_strip', bodyStyle: 'gt_aero' },
+            description: 'Motor VQ35HR atmosférico de par instantáneo y kit aerodinámico Nismo para dominar Shibuya.'
+        },
+        {
+            id: 'nsx',
+            name: 'Honda NSX-R (NA2) VTEC',
+            category: 'Mid-Engine Precision • RWD Track',
+            year: 2005,
+            classRating: 'S1 898',
+            color: 0xf8fafc,
+            secondaryColor: 0x09090b,
+            rimColor: 0xffffff,
+            neonColor: 0x22c55e,
+            stats: { speed: 88, acceleration: 90, handling: 99, drift: 82 },
+            physics: {
+                maxSpeedKmh: 316,
+                accelForce: 40.0,
+                brakeForce: 64.0,
+                turnSpeed: 2.98,
+                gripNormal: 0.96,
+                gripDrift: 0.80,
+                redlineRpm: 8600,
+                gears: 6,
+                engineBaseFreq: 80,
+                mass: 1270
+            },
+            dimensions: { width: 1.90, height: 1.20, length: 4.43, spoilerType: 'gt_carbon', taillightStyle: 'wide_bar', bodyStyle: 'supercar_low' },
+            description: 'Chasis monocasco de aluminio y motor central V6 VTEC. El paso por curva más quirúrgico de Japón.'
+        },
+        {
+            id: 'lfa',
+            name: 'Lexus LFA Nürburgring Package',
+            category: 'Hyper Apex V10 • RWD Exotic',
+            year: 2012,
+            classRating: 'S2 958',
+            color: 0x1e293b,
+            secondaryColor: 0xff6b00,
+            rimColor: 0x38bdf8,
+            neonColor: 0x38bdf8,
+            stats: { speed: 99, acceleration: 97, handling: 95, drift: 89 },
+            physics: {
+                maxSpeedKmh: 365,
+                accelForce: 46.5,
+                brakeForce: 65.0,
+                turnSpeed: 2.78,
+                gripNormal: 0.95,
+                gripDrift: 0.76,
+                redlineRpm: 9500,
+                gears: 6,
+                engineBaseFreq: 105,
+                mass: 1480
+            },
+            dimensions: { width: 1.96, height: 1.22, length: 4.51, spoilerType: 'gt_high', taillightStyle: 'tri_exhaust', bodyStyle: 'supercar_low' },
+            description: 'Superdeportivo V10 atmosférico afinado por Yamaha que ruge hasta las 9,500 RPM.'
+        }
+    ],
+
+    maps: [
+        {
+            id: 'tokyo_shuto',
+            name: 'Tokio: Autopista Shuto C1 & Wangan',
+            subtitle: 'Medianoche Neón • Asfalto Húmedo • Rascacielos y Torre de Tokio',
+            badge: 'NOCHE URBANA • 3 VUELTAS',
+            difficulty: 'Velocidad Alta',
+            lengthKm: '4.8 km × 3 Vueltas',
+            skyColorTop: 0x040716,
+            skyColorHorizon: 0x0f1a3c,
+            fogColor: 0x080e24,
+            fogDensity: 0.0018,
+            ambientColor: 0x4b63a6,
+            ambientIntensity: 0.95,
+            sunColor: 0x60a5fa,
+            sunIntensity: 1.35,
+            roadColor: 0x141824,
+            shoulderColor: 0x00e5ff,
+            groundColor: 0x060913,
+            hasTokyoTower: true,
+            hasMountFuji: false,
+            hasSakura: false,
+            hasSkyscrapers: true,
+            hasToriiGates: false,
+            curveRadiusX: 390,
+            curveRadiusZ: 280,
+            curveComplexity: 'highway'
+        },
+        {
+            id: 'hakone_touge',
+            name: 'Paso de Hakone & Monte Fuji',
+            subtitle: 'Atardecer Dorado • Cerezos Sakura en Flor • Puertas Torii',
+            badge: 'TOUGE DRIFT • 3 VUELTAS',
+            difficulty: 'Técnico / Derrape',
+            lengthKm: '4.5 km × 3 Vueltas',
+            skyColorTop: 0x1e1b4b,
+            skyColorHorizon: 0xf97316,
+            fogColor: 0x3b130a,
+            fogDensity: 0.0015,
+            ambientColor: 0xfdba74,
+            ambientIntensity: 1.05,
+            sunColor: 0xffedd5,
+            sunIntensity: 1.65,
+            roadColor: 0x1f242d,
+            shoulderColor: 0xef4444,
+            groundColor: 0x162114,
+            hasTokyoTower: false,
+            hasMountFuji: true,
+            hasSakura: true,
+            hasSkyscrapers: false,
+            hasToriiGates: true,
+            curveRadiusX: 340,
+            curveRadiusZ: 260,
+            curveComplexity: 'touge'
+        },
+        {
+            id: 'shibuya_neon',
+            name: 'Distrito Shibuya & Akihabara Cyber Circuit',
+            subtitle: 'Cruce Holográfico • Carteles LED Japoneses • Curvas Rápidas',
+            badge: 'CIRCUITO CYBER • 3 VUELTAS',
+            difficulty: 'Mixto / Urbano',
+            lengthKm: '4.6 km × 3 Vueltas',
+            skyColorTop: 0x0f051d,
+            skyColorHorizon: 0x4a044e,
+            fogColor: 0x1d0728,
+            fogDensity: 0.0017,
+            ambientColor: 0xc084fc,
+            ambientIntensity: 1.0,
+            sunColor: 0xf472b6,
+            sunIntensity: 1.4,
+            roadColor: 0x181326,
+            shoulderColor: 0xf43f5e,
+            groundColor: 0x0b0512,
+            hasTokyoTower: true,
+            hasMountFuji: true,
+            hasSakura: true,
+            hasSkyscrapers: true,
+            hasToriiGates: true,
+            curveRadiusX: 360,
+            curveRadiusZ: 270,
+            curveComplexity: 'urban'
+        }
+    ],
+
+    tracks: [
+        {
+            id: 'wangan_synth',
+            title: 'Midnight Wangan Pulse',
+            artist: 'Horizon Pulse Japan • Synthwave FM',
+            genre: 'Outrun / Synthwave',
+            bpm: 124,
+            scale: [220, 261.63, 293.66, 329.63, 392.00, 440.00, 523.25],
+            bassPattern: [110, 110, 87.31, 87.31, 130.81, 130.81, 98.00, 98.00],
+            leadPattern: [440, 523.25, 659.25, 523.25, 392.00, 440, 329.63, 293.66],
+            style: 'synthwave'
+        },
+        {
+            id: 'hakone_eurobeat',
+            title: 'Redline Over Hakone (Deja Vu Mix)',
+            artist: 'Horizon Bass Arena • Initial JDM',
+            genre: 'Eurobeat / Touge',
+            bpm: 154,
+            scale: [293.66, 329.63, 349.23, 392.00, 440.00, 466.16, 587.33],
+            bassPattern: [146.83, 146.83, 116.54, 130.81, 146.83, 146.83, 174.61, 130.81],
+            leadPattern: [587.33, 659.25, 698.46, 587.33, 523.25, 466.16, 523.25, 587.33],
+            style: 'eurobeat'
+        },
+        {
+            id: 'shibuya_phonk',
+            title: 'Tokyo Drift Cowbell 808',
+            artist: 'Horizon Block Party • Underground JDM',
+            genre: 'Drift Phonk',
+            bpm: 136,
+            scale: [196.00, 207.65, 261.63, 293.66, 311.13, 392.00],
+            bassPattern: [65.41, 65.41, 65.41, 77.78, 65.41, 65.41, 58.27, 61.74],
+            leadPattern: [392.00, 415.30, 392.00, 311.13, 261.63, 311.13, 392.00, 261.63],
+            style: 'phonk'
+        },
+        {
+            id: 'kyoto_lofi',
+            title: 'Sakura Rain in Shibuya',
+            artist: 'Horizon Hospital Records • Night Chill',
+            genre: 'Lo-Fi / Chillhop',
+            bpm: 94,
+            scale: [261.63, 293.63, 329.63, 392.00, 440.00, 493.88],
+            bassPattern: [130.81, 98.00, 110.00, 87.31, 130.81, 98.00, 110.00, 123.47],
+            leadPattern: [329.63, 392.00, 440.00, 493.88, 392.00, 329.63, 293.66, 261.63],
+            style: 'lofi'
+        },
+        {
+            id: 'akihabara_dnb',
+            title: 'Cyber Express 300 KM/H',
+            artist: 'Horizon Bass Hospital • Liquid DnB',
+            genre: 'Drum & Bass',
+            bpm: 168,
+            scale: [246.94, 293.66, 329.63, 369.99, 392.00, 440.00, 493.88],
+            bassPattern: [123.47, 123.47, 98.00, 110.00, 82.41, 82.41, 98.00, 110.00],
+            leadPattern: [493.88, 587.33, 659.25, 493.88, 440.00, 392.00, 369.99, 329.63],
+            style: 'dnb'
+        }
+    ]
+};
