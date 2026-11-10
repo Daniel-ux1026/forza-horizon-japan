@@ -116,55 +116,47 @@ class HorizonWorldBuilder {
             160
         );
 
-        // 3. Textura Dedicada para Líneas de Carril (con polygonOffset anti Z-Fighting)
+        // 3. Textura Dedicada para Líneas de Carril (Bordes blancos nítidos + línea central discontinua limpia)
         const laneCanvas = document.createElement('canvas');
         laneCanvas.width = 512;
         laneCanvas.height = 512;
         const lCtx = laneCanvas.getContext('2d');
         lCtx.clearRect(0, 0, 512, 512);
 
-        lCtx.fillStyle = '#f8fafc';
+        // Líneas continuas de borde de pista (blancas de alto contraste)
+        lCtx.fillStyle = 'rgba(248, 250, 252, 0.96)';
         lCtx.fillRect(14, 0, 10, 512);
         lCtx.fillRect(488, 0, 10, 512);
 
-        lCtx.fillStyle = '#f59e0b';
-        lCtx.fillRect(247, 0, 6, 512);
-        lCtx.fillRect(259, 0, 6, 512);
-
+        // Línea divisoria central discontinua (evita saturar el asfalto ni cortar sobre las marcas de frenado)
         for (let y = 0; y < 512; y += 64) {
-            lCtx.fillStyle = 'rgba(248, 250, 252, 0.92)';
-            lCtx.fillRect(130, y, 7, 36);
-            lCtx.fillRect(375, y, 7, 36);
-
-            lCtx.fillStyle = '#38bdf8';
-            lCtx.fillRect(129, y + 46, 9, 5);
-            lCtx.fillRect(374, y + 46, 9, 5);
+            lCtx.fillStyle = 'rgba(250, 204, 21, 0.88)';
+            lCtx.fillRect(252, y + 8, 8, 34);
         }
 
         this.textures.laneMarkings = this.configureTextureQuality(
             new THREE.CanvasTexture(laneCanvas),
             1,
-            160
+            150
         );
 
-        // 4. Textura de Marcas de Frenada y Derrape (Skid Marks)
+        // 4. Textura de Marcas de Frenada y Derrape (Skid Marks suaves en los carriles de trazada)
         const skidCanvas = document.createElement('canvas');
         skidCanvas.width = 256;
         skidCanvas.height = 256;
         const sCtx = skidCanvas.getContext('2d');
         sCtx.clearRect(0, 0, 256, 256);
 
-        for (let i = 0; i < 6; i++) {
-            const trackX = 35 + i * 36;
+        [44, 92, 148, 196].forEach((trackX) => {
             const grad = sCtx.createLinearGradient(0, 0, 0, 256);
             grad.addColorStop(0, 'rgba(5, 7, 12, 0.0)');
-            grad.addColorStop(0.2, 'rgba(5, 7, 12, 0.72)');
-            grad.addColorStop(0.8, 'rgba(5, 7, 12, 0.72)');
+            grad.addColorStop(0.22, 'rgba(8, 10, 16, 0.52)');
+            grad.addColorStop(0.78, 'rgba(8, 10, 16, 0.52)');
             grad.addColorStop(1, 'rgba(5, 7, 12, 0.0)');
             sCtx.fillStyle = grad;
-            sCtx.fillRect(trackX, 0, 10, 256);
-            sCtx.fillRect(trackX + 14, 0, 10, 256);
-        }
+            sCtx.fillRect(trackX, 0, 8, 256);
+            sCtx.fillRect(trackX + 12, 0, 8, 256);
+        });
 
         this.textures.skidMarks = this.configureTextureQuality(
             new THREE.CanvasTexture(skidCanvas),
@@ -172,20 +164,38 @@ class HorizonWorldBuilder {
             1
         );
 
-        // 5. Textura para Pianos 3D (Rumble Strips Rojo/Blanco)
+        // 5A. Textura para Pianos 3D (Rumble Strips Rojo/Blanco)
         const curbCanvas = document.createElement('canvas');
         curbCanvas.width = 128;
         curbCanvas.height = 256;
         const cCtx = curbCanvas.getContext('2d');
         for (let y = 0; y < 256; y += 64) {
-            const isRed = (y / 64) % 2 === 0;
-            cCtx.fillStyle = isRed ? '#dc2626' : '#f1f5f9';
+            const isPrimary = (y / 64) % 2 === 0;
+            cCtx.fillStyle = isPrimary ? '#dc2626' : '#f8fafc';
             cCtx.fillRect(0, y, 128, 64);
-            cCtx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+            cCtx.fillStyle = 'rgba(0, 0, 0, 0.25)';
             cCtx.fillRect(0, y + 56, 128, 8);
         }
         this.textures.curb3D = this.configureTextureQuality(
             new THREE.CanvasTexture(curbCanvas),
+            1,
+            220
+        );
+
+        // 5B. Textura para Pianos 3D Andinos (Turquesa/Blanco estilo Autódromo Cusco y Puno)
+        const curbCyanCanvas = document.createElement('canvas');
+        curbCyanCanvas.width = 128;
+        curbCyanCanvas.height = 256;
+        const ccCtx = curbCyanCanvas.getContext('2d');
+        for (let y = 0; y < 256; y += 64) {
+            const isPrimary = (y / 64) % 2 === 0;
+            ccCtx.fillStyle = isPrimary ? '#0891b2' : '#f8fafc';
+            ccCtx.fillRect(0, y, 128, 64);
+            ccCtx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+            ccCtx.fillRect(0, y + 56, 128, 8);
+        }
+        this.textures.curbCyan3D = this.configureTextureQuality(
+            new THREE.CanvasTexture(curbCyanCanvas),
             1,
             220
         );
@@ -215,24 +225,41 @@ class HorizonWorldBuilder {
             1
         );
 
-        // 7. Textura de Terreno con RepeatWrapping Proporcional
-        const groundCanvas = document.createElement('canvas');
-        groundCanvas.width = 256;
-        groundCanvas.height = 256;
-        const grCtx = groundCanvas.getContext('2d');
-        grCtx.fillStyle = '#111822';
-        grCtx.fillRect(0, 0, 256, 256);
-        for (let i = 0; i < 3500; i++) {
-            const x = Math.random() * 256;
-            const y = Math.random() * 256;
-            grCtx.fillStyle = Math.random() > 0.5 ? 'rgba(30, 41, 59, 0.55)' : 'rgba(15, 23, 42, 0.65)';
-            grCtx.fillRect(x, y, 3, 3);
-        }
-        this.textures.ground = this.configureTextureQuality(
-            new THREE.CanvasTexture(groundCanvas),
-            90,
-            90
-        );
+        // 7A. Textura de Trampa de Arena Desértica / Costera (Autódromo Arequipa & Trujillo)
+        const createSandTexture = (baseHex, grainLight, grainDark, rakeAlpha, repeatX, repeatY) => {
+            const c = document.createElement('canvas');
+            c.width = 256;
+            c.height = 256;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = baseHex;
+            ctx.fillRect(0, 0, 256, 256);
+
+            // Surcos longitudinales de trampa de arena de autódromo (raked sand trap grooves)
+            for (let x = 0; x < 256; x += 8) {
+                ctx.fillStyle = `rgba(0, 0, 0, ${rakeAlpha})`;
+                ctx.fillRect(x, 0, 3, 256);
+                ctx.fillStyle = `rgba(255, 255, 255, ${rakeAlpha * 0.65})`;
+                ctx.fillRect(x + 3, 0, 2, 256);
+            }
+
+            // Granulometría de arena y grava
+            for (let i = 0; i < 5500; i++) {
+                const x = Math.random() * 256;
+                const y = Math.random() * 256;
+                ctx.fillStyle = Math.random() > 0.48 ? grainLight : grainDark;
+                ctx.fillRect(x, y, 2, 2);
+            }
+            return this.configureTextureQuality(new THREE.CanvasTexture(c), repeatX, repeatY);
+        };
+
+        this.textures.sandDesert = createSandTexture('#d4a76a', 'rgba(245, 218, 175, 0.55)', 'rgba(156, 112, 64, 0.55)', 0.08, 3, 130);
+        this.textures.sandAndean = createSandTexture('#b98552', 'rgba(219, 174, 125, 0.52)', 'rgba(124, 83, 45, 0.55)', 0.07, 3, 130);
+        this.textures.gravelDark = createSandTexture('#2b3342', 'rgba(71, 85, 105, 0.5)', 'rgba(15, 23, 42, 0.6)', 0.06, 3, 130);
+
+        // 7B. Texturas de Terreno Exterior según Bioma (Desierto, Valle Verde/Touge y Urbano)
+        this.textures.groundDesert = createSandTexture('#c49862', 'rgba(232, 198, 150, 0.45)', 'rgba(138, 98, 54, 0.5)', 0.02, 85, 85);
+        this.textures.groundGrass = createSandTexture('#4d5e3b', 'rgba(101, 128, 72, 0.45)', 'rgba(54, 69, 40, 0.55)', 0.02, 85, 85);
+        this.textures.ground = createSandTexture('#1c2433', 'rgba(51, 65, 85, 0.45)', 'rgba(15, 23, 42, 0.6)', 0.02, 85, 85);
 
         // 8. Textura de Línea de Meta Ajedrezada
         const finishCanvas = document.createElement('canvas');
@@ -284,39 +311,77 @@ class HorizonWorldBuilder {
             1
         );
 
-        // 10. Textura con Canal Alfa para Follaje de Cerezo (Sakura Crossed Billboards)
+        // 10. Textura Orgánica con Canal Alfa Nítido para Follaje de Cerezo (Sakura Crossed Billboards)
         const sakCanvas = document.createElement('canvas');
         sakCanvas.width = 256;
         sakCanvas.height = 256;
         const skCtx = sakCanvas.getContext('2d');
         skCtx.clearRect(0, 0, 256, 256);
 
+        // Ramas secundarias orgánicas dentro de la copa
         skCtx.strokeStyle = '#3e1f0d';
-        skCtx.lineWidth = 6;
+        skCtx.lineCap = 'round';
+        skCtx.lineWidth = 7;
         skCtx.beginPath();
-        skCtx.moveTo(128, 250);
-        skCtx.lineTo(128, 110);
-        skCtx.moveTo(128, 170);
-        skCtx.lineTo(65, 95);
-        skCtx.moveTo(128, 150);
-        skCtx.lineTo(195, 85);
+        skCtx.moveTo(128, 240);
+        skCtx.lineTo(128, 120);
+        skCtx.moveTo(128, 185);
+        skCtx.lineTo(68, 105);
+        skCtx.moveTo(128, 165);
+        skCtx.lineTo(192, 96);
+        skCtx.moveTo(95, 140);
+        skCtx.lineTo(48, 78);
+        skCtx.moveTo(160, 130);
+        skCtx.lineTo(208, 72);
         skCtx.stroke();
 
-        for (let i = 0; i < 240; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const radius = Math.pow(Math.random(), 0.65) * 108;
-            const cx = 128 + Math.cos(angle) * radius;
-            const cy = 118 + Math.sin(angle) * radius * 0.85;
-            const r = 6 + Math.random() * 11;
-
-            const colors = ['#f472b6', '#fbcfe8', '#f9a8d4', '#ec4899', '#fdf2f8'];
-            skCtx.fillStyle = colors[i % colors.length];
-            skCtx.beginPath();
-            skCtx.arc(cx, cy, r, 0, Math.PI * 2);
-            skCtx.fill();
-        }
+        // Racimos densos de flores de cerezo con volumen sombreado (reemplaza la esfera sólida)
+        const blossomClusters = [
+            { x: 128, y: 92, r: 58 },
+            { x: 74, y: 118, r: 48 },
+            { x: 182, y: 114, r: 48 },
+            { x: 96, y: 74, r: 44 },
+            { x: 162, y: 76, r: 44 },
+            { x: 52, y: 88, r: 36 },
+            { x: 204, y: 86, r: 36 },
+            { x: 128, y: 136, r: 46 }
+        ];
+        const blossomPalette = ['#be185d', '#db2777', '#ec4899', '#f472b6', '#f9a8d4', '#fbcfe8', '#fdf2f8'];
+        blossomClusters.forEach((cl) => {
+            for (let i = 0; i < 65; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const dist = Math.pow(Math.random(), 0.6) * cl.r;
+                const bx = cl.x + Math.cos(ang) * dist;
+                const by = cl.y + Math.sin(ang) * dist * 0.85;
+                const br = 4 + Math.random() * 8;
+                // Sombra inferior y brillo superior
+                const colorIdx = by > cl.y + 8
+                    ? Math.floor(Math.random() * 3)
+                    : 2 + Math.floor(Math.random() * (blossomPalette.length - 2));
+                skCtx.fillStyle = blossomPalette[colorIdx];
+                skCtx.beginPath();
+                skCtx.arc(bx, by, br, 0, Math.PI * 2);
+                skCtx.fill();
+            }
+        });
         this.textures.sakuraBranch = new THREE.CanvasTexture(sakCanvas);
         this.textures.sakuraBranch.anisotropy = this.maxAnisotropy;
+
+        // 11. Textura Circular Radial para Pétalos / Partículas (evita que WebGL dibuje cuadrados grises)
+        const partCanvas = document.createElement('canvas');
+        partCanvas.width = 64;
+        partCanvas.height = 64;
+        const pCtx = partCanvas.getContext('2d');
+        pCtx.clearRect(0, 0, 64, 64);
+        const radGrad = pCtx.createRadialGradient(32, 32, 2, 32, 32, 28);
+        radGrad.addColorStop(0, 'rgba(255, 240, 248, 1.0)');
+        radGrad.addColorStop(0.55, 'rgba(249, 168, 212, 0.92)');
+        radGrad.addColorStop(1, 'rgba(249, 168, 212, 0.0)');
+        pCtx.fillStyle = radGrad;
+        pCtx.beginPath();
+        pCtx.arc(32, 32, 28, 0, Math.PI * 2);
+        pCtx.fill();
+        this.textures.roundParticle = new THREE.CanvasTexture(partCanvas);
     }
 
     createNeonSignTexture(textJP, textEN, bgHex, borderHex) {
@@ -418,17 +483,28 @@ class HorizonWorldBuilder {
         let y = 0;
 
         if (mapConfig.curveComplexity === 'touge') {
-            x += Math.sin(angle * 3) * 68 + Math.cos(angle * 5) * 26;
-            z += Math.cos(angle * 2) * 58 + Math.sin(angle * 4) * 32;
-            y = Math.sin(angle * 2) * 14 + Math.cos(angle * 3) * 6 + 14;
+            x += Math.sin(angle * 3) * 66 + Math.cos(angle * 5) * 24;
+            z += Math.cos(angle * 2) * 56 + Math.sin(angle * 4) * 30;
+            // Elevación progresiva asentada sobre talud de montaña y arena (evita que la pista flote en el cielo)
+            y = Math.sin(angle * 2) * 3.8 + Math.cos(angle * 3) * 1.8 + 4.2;
+        } else if (mapConfig.curveComplexity === 'peru_desert_gp') {
+            // Autódromo Arequipa & Trujillo: horquillas técnicas y recta rápida de boxes
+            x += Math.sin(angle * 2) * 72 + Math.cos(angle * 4) * 28;
+            z += Math.sin(angle * 3) * 54 + Math.cos(angle * 2) * 24;
+            y = Math.sin(angle * 2) * 1.8 + Math.cos(angle) * 1.1 + 1.8;
+        } else if (mapConfig.curveComplexity === 'peru_andean_gp') {
+            // Autódromo Cusco & Puno: eses enlazadas del altiplano y curvón peraltado junto al lago
+            x += Math.cos(angle * 3) * 64 + Math.sin(angle * 4) * 26;
+            z += Math.sin(angle * 2) * 60 + Math.cos(angle * 5) * 22;
+            y = Math.sin(angle * 3) * 2.4 + Math.cos(angle * 2) * 1.4 + 2.5;
         } else if (mapConfig.curveComplexity === 'urban') {
             x += Math.sin(angle * 4) * 52;
             z += Math.cos(angle * 3) * 48;
-            y = Math.sin(angle * 2) * 4 + 4;
+            y = Math.sin(angle * 2) * 2.0 + 2.2;
         } else {
             x += Math.sin(angle * 2) * 65;
             z += Math.cos(angle * 3) * 45;
-            y = Math.sin(angle * 2) * 7 + 7;
+            y = Math.sin(angle * 2) * 3.2 + 3.4;
         }
 
         return new THREE.Vector3(x, y, z);
@@ -484,13 +560,23 @@ class HorizonWorldBuilder {
         }
         this.trackTotalLengthMeters = Math.max(1800, totalLen);
 
-        // 1. Terreno con RepeatWrapping proporcional
+        // 0. Domo de Cielo Degradado 3D y Cordillera Perimetral (elimina el corte brusco cielo/suelo)
+        this.buildSkyDome(mapConfig);
+        this.buildPerimeterMountains(mapConfig);
+
+        // 1. Terreno base con textura adaptada al bioma (Desierto Peruano, Pradera Andina/Hakone o Urbano)
         const groundGeo = new THREE.PlaneGeometry(3600, 3600);
+        let groundTex = this.textures.ground;
+        if (mapConfig.runoffType === 'sand_desert') {
+            groundTex = this.textures.groundDesert;
+        } else if (mapConfig.runoffType === 'sand_warm' || mapConfig.runoffType === 'sand_andean') {
+            groundTex = this.textures.groundGrass;
+        }
         const groundMat = new THREE.MeshStandardMaterial({
             color: mapConfig.groundColor,
-            map: this.textures.ground,
+            map: groundTex,
             roughness: 0.92,
-            metalness: 0.05
+            metalness: 0.04
         });
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
@@ -498,32 +584,218 @@ class HorizonWorldBuilder {
         ground.receiveShadow = true;
         this.worldGroup.add(ground);
 
-        // 2. Asfalto + Líneas de Carril (polygonOffset) + Pianos 3D + Skid Marks fusionados
+        // 2. Asfalto + Líneas de Carril + Pianos 3D + Trampas de Arena y Talud Continuo (0 huecos bajo la pista)
         this.buildRoadAndLaneMeshes();
-        this.build3DRumbleCurbs();
+        this.build3DRumbleCurbs(mapConfig);
+        this.buildTrackSandRunoffAndEmbankment(mapConfig);
         this.buildCornerSkidMarks();
 
         // 3. Vallas Metálicas Bionda + Postes Instanciados (InstancedMesh)
         this.buildMetallicGuardrails(mapConfig);
 
-        // 4. Señales de Tráfico Japonesas ("止まれ", Dirección y Curva)
+        // 4. Señales de Tráfico ("止まれ", Dirección y Curva) ancladas al talud
         this.buildJapaneseTrafficSigns();
 
         // 5. Pórtico de Salida / Meta + Checkpoints
-        this.buildFestivalStartGate();
+        this.buildFestivalStartGate(mapConfig);
         this.buildCheckpointArches();
 
-        // 6. Monumentos, Rascacielos, Farolas Instanciadas y Sakura Instanciado
+        // 6. Monumentos, Autódromos del Perú, Rascacielos, Farolas y Vegetación
         if (mapConfig.hasMountFuji) this.buildMountFuji();
         if (mapConfig.hasTokyoTower) this.buildTokyoTower();
         if (mapConfig.hasToriiGates) this.buildToriiGatesAlongTrack();
         if (mapConfig.hasSkyscrapers) this.buildCitySkyscrapers();
+        if (mapConfig.hasAutodromePits) this.buildPeruvianAutodromeComplex(mapConfig);
+        if (mapConfig.hasVolcanMisti) this.buildVolcanMistiAndPacific();
+        if (mapConfig.hasAndeanLake) this.buildLakeTiticacaAndAndeanTown();
 
         this.buildStreetLightsWithSpotlights();
 
         if (mapConfig.hasSakura) {
             this.buildSakuraTreesAndPetals();
         }
+    }
+
+    /**
+     * Crea un Domo Atmosférico 3D con degradado suave entre el cenit y el horizonte.
+     */
+    buildSkyDome(mapConfig) {
+        const skyCanvas = document.createElement('canvas');
+        skyCanvas.width = 64;
+        skyCanvas.height = 256;
+        const ctx = skyCanvas.getContext('2d');
+        const grad = ctx.createLinearGradient(0, 0, 0, 256);
+
+        const toHex = (num) => '#' + (num || 0x0f172a).toString(16).padStart(6, '0');
+        grad.addColorStop(0.0, toHex(mapConfig.skyColorTop));
+        grad.addColorStop(0.52, toHex(mapConfig.skyColorMid || mapConfig.skyColorTop));
+        grad.addColorStop(0.86, toHex(mapConfig.skyColorHorizon));
+        grad.addColorStop(1.0, toHex(mapConfig.fogColor || mapConfig.skyColorHorizon));
+
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 64, 256);
+
+        const skyTex = new THREE.CanvasTexture(skyCanvas);
+        const skyGeo = new THREE.SphereGeometry(1650, 24, 16);
+        const skyMat = new THREE.MeshBasicMaterial({
+            map: skyTex,
+            side: THREE.BackSide,
+            depthWrite: false,
+            fog: false
+        });
+        const skyDome = new THREE.Mesh(skyGeo, skyMat);
+        skyDome.position.y = -20;
+        this.worldGroup.add(skyDome);
+    }
+
+    /**
+     * Construye un anillo de montañas y colinas en el horizonte (1 InstancedMesh)
+     * para integrar el terreno con el cielo de forma realista.
+     */
+    buildPerimeterMountains(mapConfig) {
+        let mountainColor = 0x1e293b;
+        if (mapConfig.runoffType === 'sand_desert') {
+            mountainColor = 0x9a7348; // Cerros áridos de Arequipa / Costa Norte
+        } else if (mapConfig.runoffType === 'sand_andean') {
+            mountainColor = 0x4b5c3b; // Cordillera de Cusco / Puno
+        } else if (mapConfig.runoffType === 'sand_warm') {
+            mountainColor = 0x374733; // Colinas de Hakone
+        }
+
+        const peakGeo = new THREE.ConeGeometry(165, 130, 7);
+        const peakMat = new THREE.MeshStandardMaterial({
+            color: mountainColor,
+            roughness: 0.92,
+            metalness: 0.04
+        });
+
+        const count = 24;
+        const inst = new THREE.InstancedMesh(peakGeo, peakMat, count);
+        const dummy = new THREE.Object3D();
+
+        for (let i = 0; i < count; i++) {
+            const ang = (i / count) * Math.PI * 2;
+            const dist = 1080 + (i % 3) * 110;
+            const scaleY = 0.7 + ((i * 5) % 7) * 0.18;
+            const scaleXZ = 1.0 + (i % 4) * 0.25;
+            dummy.position.set(Math.cos(ang) * dist, (130 * scaleY) * 0.45 - 8, Math.sin(ang) * dist);
+            dummy.rotation.set(0, ang, 0);
+            dummy.scale.set(scaleXZ, scaleY, scaleXZ);
+            dummy.updateMatrix();
+            inst.setMatrixAt(i, dummy.matrix);
+        }
+        inst.instanceMatrix.needsUpdate = true;
+        this.worldGroup.add(inst);
+    }
+
+    /**
+     * Genera las Trampas de Arena / Escapatorias de Grava (Sand & Gravel Runoff Traps)
+     * y los Taludes de Terreno (Embankments) que conectan la pista con el suelo,
+     * eliminando por completo el defecto de pista flotante o huecos oscuros.
+     */
+    buildTrackSandRunoffAndEmbankment(mapConfig) {
+        const numPts = this.trackPoints.length;
+        const innerStart = this.roadWidth * 0.5 + 0.75; // Justo al borde del piano 3D
+        const sandBeltOuter = innerStart + 18.5;        // 18.5m de trampa de arena/grava a cada lado
+        const embankmentOuter = sandBeltOuter + 52.0;   // Talud suave hasta el suelo base (y = -0.65)
+
+        let sandTex = this.textures.sandDesert;
+        let embankmentColor = 0xa37c4c;
+        if (mapConfig.runoffType === 'sand_andean') {
+            sandTex = this.textures.sandAndean;
+            embankmentColor = 0x556940;
+        } else if (mapConfig.runoffType === 'sand_warm') {
+            sandTex = this.textures.sandDesert;
+            embankmentColor = 0x455736;
+        } else if (mapConfig.runoffType === 'gravel_dark') {
+            sandTex = this.textures.gravelDark;
+            embankmentColor = 0x1b2332;
+        }
+
+        const sandMat = new THREE.MeshStandardMaterial({
+            map: sandTex,
+            roughness: 0.92,
+            metalness: 0.03,
+            polygonOffset: true,
+            polygonOffsetFactor: 1,
+            polygonOffsetUnits: 1
+        });
+
+        const bankMat = new THREE.MeshStandardMaterial({
+            color: embankmentColor,
+            map: mapConfig.runoffType === 'sand_desert' ? this.textures.groundDesert : this.textures.groundGrass,
+            roughness: 0.95,
+            metalness: 0.02
+        });
+
+        [-1, 1].forEach((side) => {
+            const sandPos = [];
+            const sandUvs = [];
+            const sandIdx = [];
+
+            const bankPos = [];
+            const bankUvs = [];
+            const bankIdx = [];
+
+            for (let i = 0; i <= numPts; i++) {
+                const idx = i % numPts;
+                const nextIdx = (i + 1) % numPts;
+                const p = this.trackPoints[idx];
+                const pNext = this.trackPoints[nextIdx];
+
+                const tangent = new THREE.Vector3().subVectors(pNext, p).normalize();
+                const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+                const ptInner = new THREE.Vector3().copy(p).addScaledVector(right, side * innerStart);
+                const ptSandEdge = new THREE.Vector3().copy(p).addScaledVector(right, side * sandBeltOuter);
+                const ptGroundEdge = new THREE.Vector3().copy(p).addScaledVector(right, side * embankmentOuter);
+
+                // Franja 1: Trampa de Arena / Escapatoria al nivel de la pista
+                sandPos.push(
+                    ptInner.x, p.y + 0.03, ptInner.z,
+                    ptSandEdge.x, p.y - 0.18, ptSandEdge.z
+                );
+
+                // Franja 2: Talud que une el borde de la arena con el suelo en y = -0.65
+                bankPos.push(
+                    ptSandEdge.x, p.y - 0.18, ptSandEdge.z,
+                    ptGroundEdge.x, -0.65, ptGroundEdge.z
+                );
+
+                const v = i / numPts;
+                sandUvs.push(0, v, 1, v);
+                bankUvs.push(0, v, 1, v);
+
+                if (i < numPts) {
+                    const b = i * 2;
+                    if (side === 1) {
+                        sandIdx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+                        bankIdx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+                    } else {
+                        sandIdx.push(b + 1, b, b + 2, b + 3, b + 1, b + 2);
+                        bankIdx.push(b + 1, b, b + 2, b + 3, b + 1, b + 2);
+                    }
+                }
+            }
+
+            const sGeo = new THREE.BufferGeometry();
+            sGeo.setAttribute('position', new THREE.Float32BufferAttribute(sandPos, 3));
+            sGeo.setAttribute('uv', new THREE.Float32BufferAttribute(sandUvs, 2));
+            sGeo.setIndex(sandIdx);
+            sGeo.computeVertexNormals();
+            const sMesh = new THREE.Mesh(sGeo, sandMat);
+            sMesh.receiveShadow = true;
+            this.worldGroup.add(sMesh);
+
+            const bGeo = new THREE.BufferGeometry();
+            bGeo.setAttribute('position', new THREE.Float32BufferAttribute(bankPos, 3));
+            bGeo.setAttribute('uv', new THREE.Float32BufferAttribute(bankUvs, 2));
+            bGeo.setIndex(bankIdx);
+            bGeo.computeVertexNormals();
+            const bMesh = new THREE.Mesh(bGeo, bankMat);
+            bMesh.receiveShadow = true;
+            this.worldGroup.add(bMesh);
+        });
     }
 
     buildRoadAndLaneMeshes() {
@@ -604,11 +876,14 @@ class HorizonWorldBuilder {
         this.worldGroup.add(laneMesh);
     }
 
-    build3DRumbleCurbs() {
+    build3DRumbleCurbs(mapConfig) {
         const numPts = this.trackPoints.length;
         const curbWidth = 1.15;
         const innerOffset = this.roadWidth * 0.5 - 0.25;
         const outerOffset = innerOffset + curbWidth;
+        const curbTex = (mapConfig && mapConfig.curbStyle === 'cyan_white')
+            ? this.textures.curbCyan3D
+            : this.textures.curb3D;
 
         [-1, 1].forEach((side) => {
             const positions = [];
@@ -633,7 +908,7 @@ class HorizonWorldBuilder {
                 positions.push(
                     ptInner.x, ptInner.y + 0.085, ptInner.z,
                     ptPeak.x, ptPeak.y + rippleHeight, ptPeak.z,
-                    ptOuter.x, ptOuter.y + 0.09, ptOuter.z
+                    ptOuter.x, ptOuter.y + 0.04, ptOuter.z
                 );
 
                 const v = i / numPts;
@@ -658,7 +933,7 @@ class HorizonWorldBuilder {
             curbGeo.computeVertexNormals();
 
             const curbMat = new THREE.MeshStandardMaterial({
-                map: this.textures.curb3D,
+                map: curbTex,
                 roughness: 0.45,
                 metalness: 0.1,
                 polygonOffset: true,
@@ -730,7 +1005,7 @@ class HorizonWorldBuilder {
         const skidMat = new THREE.MeshBasicMaterial({
             map: this.textures.skidMarks,
             transparent: true,
-            opacity: 0.72,
+            opacity: 0.65,
             depthWrite: false,
             polygonOffset: true,
             polygonOffsetFactor: -2,
@@ -741,11 +1016,11 @@ class HorizonWorldBuilder {
     }
 
     /**
-     * Barreras Metálicas Bionda con Postes renderizados mediante THREE.InstancedMesh (1 Draw Call para 360 postes).
+     * Barreras Metálicas Bionda con Postes anclados a la berma de arena/grava (1 Draw Call para 360 postes).
      */
     buildMetallicGuardrails(mapConfig) {
         const numPts = this.trackPoints.length;
-        const railOffset = this.roadWidth * 0.5 + 0.95;
+        const railOffset = this.roadWidth * 0.5 + 1.05;
 
         const railMat = new THREE.MeshStandardMaterial({
             map: this.textures.guardrail,
@@ -765,7 +1040,7 @@ class HorizonWorldBuilder {
             color: mapConfig.shoulderColor
         });
 
-        const postGeo = new THREE.BoxGeometry(0.18, 1.15, 0.18);
+        const postGeo = new THREE.BoxGeometry(0.18, 1.65, 0.18);
         const postTransforms = [];
         const dummy = new THREE.Object3D();
 
@@ -802,7 +1077,7 @@ class HorizonWorldBuilder {
                     neonIndices.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
 
                     if (i % 2 === 0) {
-                        dummy.position.set(pos.x, pos.y + 0.55, pos.z);
+                        dummy.position.set(pos.x, pos.y + 0.30, pos.z);
                         dummy.rotation.set(0, Math.atan2(tangent.x, tangent.z), 0);
                         dummy.updateMatrix();
                         postTransforms.push(dummy.matrix.clone());
@@ -827,7 +1102,6 @@ class HorizonWorldBuilder {
             this.worldGroup.add(new THREE.Mesh(nGeo, neonTopMat));
         });
 
-        // InstancedMesh único para todos los postes de acero
         const instancedPosts = new THREE.InstancedMesh(postGeo, postMat, postTransforms.length);
         instancedPosts.castShadow = true;
         instancedPosts.receiveShadow = true;
@@ -852,7 +1126,8 @@ class HorizonWorldBuilder {
             });
         });
 
-        const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 3.8, 8);
+        // Poste con cimentación extendida para que nunca quede flotando sobre la berma
+        const poleGeo = new THREE.CylinderGeometry(0.08, 0.09, 5.2, 8);
         const boardGeo = new THREE.PlaneGeometry(1.45, 1.45);
         const poleMatrices = [];
         const dummy = new THREE.Object3D();
@@ -864,17 +1139,17 @@ class HorizonWorldBuilder {
             const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
 
             const side = (i % 36 === 10) ? -1 : 1;
-            const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * (this.roadWidth * 0.5 + 1.85));
+            const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * (this.roadWidth * 0.5 + 2.1));
 
-            dummy.position.set(pos.x, pos.y + 1.9, pos.z);
+            dummy.position.set(pos.x, p.y + 1.2, pos.z);
             dummy.rotation.set(0, 0, 0);
             dummy.updateMatrix();
             poleMatrices.push(dummy.matrix.clone());
 
             const matIdx = this.trackCurvatures[i] > 0.02 ? 1 : (i % 3);
             const board = new THREE.Mesh(boardGeo, signMaterials[matIdx]);
-            board.position.set(pos.x, pos.y + 3.5, pos.z);
-            board.lookAt(pos.x - tangent.x, pos.y + 3.5, pos.z - tangent.z);
+            board.position.set(pos.x, p.y + 3.45, pos.z);
+            board.lookAt(pos.x - tangent.x, p.y + 3.45, pos.z - tangent.z);
             this.worldGroup.add(board);
         }
 
@@ -885,7 +1160,7 @@ class HorizonWorldBuilder {
     }
 
     /**
-     * Farolas Urbanas de Tokio optimizadas con THREE.InstancedMesh (4 Draw Calls en total)
+     * Farolas de Circuito optimizadas con THREE.InstancedMesh (4 Draw Calls en total)
      * + THREE.SpotLight atenuadas reales sobre el asfalto.
      */
     buildStreetLightsWithSpotlights() {
@@ -898,12 +1173,12 @@ class HorizonWorldBuilder {
         const coneMat = new THREE.MeshBasicMaterial({
             color: 0x38bdf8,
             transparent: true,
-            opacity: 0.09,
+            opacity: 0.07,
             depthWrite: false,
             side: THREE.DoubleSide
         });
 
-        const poleGeo = new THREE.CylinderGeometry(0.14, 0.20, 8.8, 8);
+        const poleGeo = new THREE.CylinderGeometry(0.14, 0.22, 10.6, 8);
         const armGeo = new THREE.BoxGeometry(0.14, 0.14, 4.2);
         const bulbGeo = new THREE.BoxGeometry(0.9, 0.18, 0.45);
         const coneGeo = new THREE.ConeGeometry(4.2, 8.5, 12, 1, true);
@@ -917,45 +1192,45 @@ class HorizonWorldBuilder {
         let spotLightCount = 0;
         const maxActiveSpotLights = 8;
 
-        for (let i = 0; i < this.trackPoints.length; i += 12) {
+        for (let i = 0; i < this.trackPoints.length; i += 14) {
             const p = this.trackPoints[i];
             const pNext = this.trackPoints[(i + 1) % this.trackPoints.length];
             const tangent = new THREE.Vector3().subVectors(pNext, p).normalize();
             const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
 
-            const side = (i % 24 === 0) ? 1 : -1;
-            const basePos = new THREE.Vector3().copy(p).addScaledVector(right, side * (this.roadWidth * 0.5 + 1.35));
+            const side = (i % 28 === 0) ? 1 : -1;
+            const basePos = new THREE.Vector3().copy(p).addScaledVector(right, side * (this.roadWidth * 0.5 + 1.55));
             const armDir = new THREE.Vector3().copy(right).multiplyScalar(-side);
 
-            // Mástil
-            dummy.position.set(basePos.x, basePos.y + 4.4, basePos.z);
+            // Mástil hundido en la berma para no flotar nunca
+            dummy.position.set(basePos.x, p.y + 3.5, basePos.z);
             dummy.rotation.set(0, 0, 0);
             dummy.updateMatrix();
             poleMats.push(dummy.matrix.clone());
 
             // Brazo
             const armPos = new THREE.Vector3().copy(basePos).addScaledVector(armDir, 2.1);
-            dummy.position.set(armPos.x, basePos.y + 8.7, armPos.z);
-            dummy.lookAt(basePos.x + armDir.x * 5, basePos.y + 8.7, basePos.z + armDir.z * 5);
+            dummy.position.set(armPos.x, p.y + 8.7, armPos.z);
+            dummy.lookAt(basePos.x + armDir.x * 5, p.y + 8.7, basePos.z + armDir.z * 5);
             dummy.updateMatrix();
             armMats.push(dummy.matrix.clone());
 
             // Cabezal LED
             const headPos = new THREE.Vector3().copy(basePos).addScaledVector(armDir, 3.8);
-            dummy.position.set(headPos.x, basePos.y + 8.62, headPos.z);
+            dummy.position.set(headPos.x, p.y + 8.62, headPos.z);
             dummy.rotation.set(0, Math.atan2(tangent.x, tangent.z), 0);
             dummy.updateMatrix();
             bulbMats.push(dummy.matrix.clone());
 
             // Cono de luz
-            dummy.position.set(headPos.x, basePos.y + 4.3, headPos.z);
+            dummy.position.set(headPos.x, p.y + 4.3, headPos.z);
             dummy.rotation.set(0, 0, 0);
             dummy.updateMatrix();
             coneMats.push(dummy.matrix.clone());
 
-            if (spotLightCount < maxActiveSpotLights && i % 48 === 0) {
+            if (spotLightCount < maxActiveSpotLights && i % 56 === 0) {
                 const spot = new THREE.SpotLight(0x38bdf8, 1.35, 38, Math.PI / 3.2, 0.65, 1.5);
-                spot.position.set(headPos.x, basePos.y + 8.5, headPos.z);
+                spot.position.set(headPos.x, p.y + 8.5, headPos.z);
                 spot.target.position.set(p.x, p.y, p.z);
                 this.worldGroup.add(spot);
                 this.worldGroup.add(spot.target);
@@ -977,7 +1252,7 @@ class HorizonWorldBuilder {
         addInst(coneGeo, coneMat, coneMats, false);
     }
 
-    buildFestivalStartGate() {
+    buildFestivalStartGate(mapConfig) {
         const p0 = this.trackPoints[0];
         const p1 = this.trackPoints[1];
         const tangent = new THREE.Vector3().subVectors(p1, p0).normalize();
@@ -1001,24 +1276,30 @@ class HorizonWorldBuilder {
         finishPlane.receiveShadow = true;
         gateGroup.add(finishPlane);
 
-        const pillarGeo = new THREE.BoxGeometry(1.4, 10.5, 1.4);
+        const pillarGeo = new THREE.BoxGeometry(1.4, 12.5, 1.4);
         const pillarMat = new THREE.MeshStandardMaterial({
             color: 0x0f172a,
-            emissive: 0xf43f5e,
+            emissive: mapConfig && mapConfig.hasAutodromePits ? 0xef4444 : 0xf43f5e,
             emissiveIntensity: 0.65
         });
 
         const leftPillar = new THREE.Mesh(pillarGeo, pillarMat);
-        leftPillar.position.set(-this.roadWidth * 0.54, 5.25, 0);
+        leftPillar.position.set(-this.roadWidth * 0.54, 4.25, 0);
         leftPillar.castShadow = true;
         gateGroup.add(leftPillar);
 
         const rightPillar = new THREE.Mesh(pillarGeo, pillarMat);
-        rightPillar.position.set(this.roadWidth * 0.54, 5.25, 0);
+        rightPillar.position.set(this.roadWidth * 0.54, 4.25, 0);
         rightPillar.castShadow = true;
         gateGroup.add(rightPillar);
 
-        const bannerTex = this.createNeonSignTexture('🏁 SALIDA / META • 3 VUELTAS', 'HORIZON JAPAN GRAND PRIX', '#090d16', '#00e5ff');
+        const isPeru = mapConfig && mapConfig.hasAutodromePits;
+        const bannerTex = this.createNeonSignTexture(
+            isPeru ? '🏁 SALIDA / META • RACING.PE' : '🏁 SALIDA / META • 3 VUELTAS',
+            isPeru ? 'GRAN PREMIO NACIONAL DEL PERÚ' : 'HORIZON JAPAN GRAND PRIX',
+            '#090d16',
+            isPeru ? '#ef4444' : '#00e5ff'
+        );
         const bannerGeo = new THREE.BoxGeometry(this.roadWidth * 1.15, 3.1, 1.0);
         const bannerMat = new THREE.MeshStandardMaterial({
             map: bannerTex,
@@ -1053,12 +1334,12 @@ class HorizonWorldBuilder {
             cpGroup.position.copy(p);
             cpGroup.rotation.y = angle;
 
-            const leftLaser = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 9, 8), archMat);
-            leftLaser.position.set(-this.roadWidth * 0.5, 4.5, 0);
+            const leftLaser = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 11, 8), archMat);
+            leftLaser.position.set(-this.roadWidth * 0.5, 3.8, 0);
             cpGroup.add(leftLaser);
 
-            const rightLaser = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 9, 8), archMat);
-            rightLaser.position.set(this.roadWidth * 0.5, 4.5, 0);
+            const rightLaser = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 11, 8), archMat);
+            rightLaser.position.set(this.roadWidth * 0.5, 3.8, 0);
             cpGroup.add(rightLaser);
 
             const topBar = new THREE.Mesh(new THREE.BoxGeometry(this.roadWidth, 0.65, 0.65), archMat);
@@ -1079,21 +1360,21 @@ class HorizonWorldBuilder {
         const fujiGroup = new THREE.Group();
         fujiGroup.position.set(-550, -2, -620);
 
-        const baseGeo = new THREE.ConeGeometry(350, 240, 36, 1, true);
-        const baseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.85 });
+        const baseGeo = new THREE.ConeGeometry(380, 250, 36, 1, true);
+        const baseMat = new THREE.MeshStandardMaterial({ color: 0x263248, roughness: 0.85 });
         const baseMesh = new THREE.Mesh(baseGeo, baseMat);
-        baseMesh.position.y = 120;
+        baseMesh.position.y = 125;
         fujiGroup.add(baseMesh);
 
-        const snowGeo = new THREE.ConeGeometry(142, 98, 36);
+        const snowGeo = new THREE.ConeGeometry(152, 104, 36);
         const snowMat = new THREE.MeshStandardMaterial({
             color: 0xf8fafc,
-            emissive: 0x334155,
-            emissiveIntensity: 0.25,
-            roughness: 0.5
+            emissive: 0x475569,
+            emissiveIntensity: 0.28,
+            roughness: 0.45
         });
         const snowMesh = new THREE.Mesh(snowGeo, snowMat);
-        snowMesh.position.y = 191;
+        snowMesh.position.y = 198;
         fujiGroup.add(snowMesh);
 
         this.worldGroup.add(fujiGroup);
@@ -1101,7 +1382,7 @@ class HorizonWorldBuilder {
 
     buildTokyoTower() {
         const towerGroup = new THREE.Group();
-        towerGroup.position.set(140, 0, -90);
+        towerGroup.position.set(140, -1, -90);
 
         const redMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0x7f1d1d, emissiveIntensity: 0.4 });
         const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x475569, emissiveIntensity: 0.3 });
@@ -1134,13 +1415,14 @@ class HorizonWorldBuilder {
     }
 
     /**
-     * Puertas Torii renderizadas con THREE.InstancedMesh (3 Draw Calls en total).
+     * Puertas Torii con columnas de cimentación profunda (3 Draw Calls en total)
+     * para que nunca se vean flotando en pendientes.
      */
     buildToriiGatesAlongTrack() {
         const toriiMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4 });
         const blackMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.5 });
 
-        const colGeo = new THREE.CylinderGeometry(0.55, 0.65, 9.8, 10);
+        const colGeo = new THREE.CylinderGeometry(0.55, 0.68, 13.5, 10);
         const topBeamGeo = new THREE.BoxGeometry(this.roadWidth * 1.3, 0.9, 1.1);
         const subBeamGeo = new THREE.BoxGeometry(this.roadWidth * 1.18, 0.65, 0.8);
 
@@ -1157,8 +1439,8 @@ class HorizonWorldBuilder {
             const angle = Math.atan2(tangent.x, tangent.z);
 
             [-1, 1].forEach((side) => {
-                const cPos = new THREE.Vector3().copy(p).addScaledVector(right, side * this.roadWidth * 0.54);
-                dummy.position.set(cPos.x, p.y + 4.9, cPos.z);
+                const cPos = new THREE.Vector3().copy(p).addScaledVector(right, side * this.roadWidth * 0.56);
+                dummy.position.set(cPos.x, p.y + 3.05, cPos.z);
                 dummy.rotation.set(0, angle, 0);
                 dummy.updateMatrix();
                 colMats.push(dummy.matrix.clone());
@@ -1218,12 +1500,12 @@ class HorizonWorldBuilder {
             });
         });
 
-        // 4 arquetipos de rascacielos pre-escalados con UV proporcionales e InstancedMesh (4 Draw Calls en vez de 102)
+        // 4 arquetipos de rascacielos asentados firmemente desde el suelo (-2m)
         const archetypes = [
-            { w: 16, d: 16, h: 42 },
-            { w: 20, d: 18, h: 58 },
-            { w: 22, d: 20, h: 76 },
-            { w: 26, d: 22, h: 96 }
+            { w: 16, d: 16, h: 46 },
+            { w: 20, d: 18, h: 64 },
+            { w: 22, d: 20, h: 82 },
+            { w: 26, d: 22, h: 102 }
         ];
 
         const archData = archetypes.map(({ w, d, h }) => {
@@ -1250,18 +1532,18 @@ class HorizonWorldBuilder {
             [-1, 1].forEach((side, sideIdx) => {
                 const archIdx = (i + sideIdx) % archData.length;
                 const arch = archData[archIdx];
-                const dist = this.roadWidth * 0.5 + 16 + (i % 3) * 8;
+                const dist = this.roadWidth * 0.5 + 22 + (i % 3) * 8;
                 const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * dist);
 
-                dummy.position.set(pos.x, pos.y + arch.h * 0.5 - 2, pos.z);
+                dummy.position.set(pos.x, arch.h * 0.5 - 3.0, pos.z);
                 dummy.rotation.set(0, 0, 0);
                 dummy.updateMatrix();
                 arch.matrices.push(dummy.matrix.clone());
 
                 if (i % 14 === 0) {
                     const signMesh = new THREE.Mesh(signGeo, signMats[(i + sideIdx) % signMats.length]);
-                    const signPos = new THREE.Vector3().copy(p).addScaledVector(right, side * (this.roadWidth * 0.5 + 5.8));
-                    signMesh.position.set(signPos.x, p.y + 8.5 + (i % 10), signPos.z);
+                    const signPos = new THREE.Vector3().copy(p).addScaledVector(right, side * (this.roadWidth * 0.5 + 6.2));
+                    signMesh.position.set(signPos.x, p.y + 8.5 + (i % 8), signPos.z);
                     signMesh.lookAt(p.x, p.y + 6.5, p.z);
                     this.worldGroup.add(signMesh);
                 }
@@ -1280,31 +1562,25 @@ class HorizonWorldBuilder {
     }
 
     /**
-     * Cerezos Sakura renderizados mediante THREE.InstancedMesh (3 Draw Calls en total para 144 árboles).
+     * Cerezos Sakura orgánicos multi-plano (sin las esferas rosas artificiales)
+     * anclados firmemente en la berma/talud y con pétalos circulares suaves.
      */
     buildSakuraTreesAndPetals() {
-        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3e1f0d, roughness: 0.9 });
+        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3e1f0d, roughness: 0.92 });
         const crossedPlaneMat = new THREE.MeshStandardMaterial({
             map: this.textures.sakuraBranch,
-            alphaTest: 0.18,
+            alphaTest: 0.28,
             transparent: true,
-            roughness: 0.6,
+            roughness: 0.65,
             side: THREE.DoubleSide
         });
-        const softCanopyMat = new THREE.MeshStandardMaterial({
-            color: 0xf9a8d4,
-            emissive: 0x831843,
-            emissiveIntensity: 0.18,
-            roughness: 0.65
-        });
 
-        const trunkGeo = new THREE.CylinderGeometry(0.28, 0.52, 4.4, 8);
-        const crossedPlaneGeo = new THREE.PlaneGeometry(6.8, 6.2);
-        const crownGeo = new THREE.SphereGeometry(2.5, 10, 8);
+        // Tronco largo (6.8m) que penetra en el talud para no flotar jamás
+        const trunkGeo = new THREE.CylinderGeometry(0.24, 0.52, 6.8, 8);
+        const crossedPlaneGeo = new THREE.PlaneGeometry(7.6, 6.8);
 
         const trunkMats = [];
         const planeMats = [];
-        const crownMats = [];
         const dummy = new THREE.Object3D();
 
         for (let i = 3; i < this.trackPoints.length; i += 5) {
@@ -1314,31 +1590,27 @@ class HorizonWorldBuilder {
             const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
 
             [-1, 1].forEach((side) => {
-                const offset = this.roadWidth * 0.5 + 5.2 + ((i * 7) % 9);
+                const offset = this.roadWidth * 0.5 + 6.5 + ((i * 7) % 10);
                 const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * offset);
+                // Cota de superficie en la berma/talud
+                const groundSurfaceY = p.y - 0.15 - Math.max(0, offset - (this.roadWidth * 0.5 + 18.5)) * 0.06;
 
-                dummy.position.set(pos.x, pos.y + 2.2, pos.z);
+                dummy.position.set(pos.x, groundSurfaceY + 1.4, pos.z);
                 dummy.rotation.set(0, 0, 0);
                 dummy.scale.set(1, 1, 1);
                 dummy.updateMatrix();
                 trunkMats.push(dummy.matrix.clone());
 
                 const baseRot = (i * 0.7) % Math.PI;
-                dummy.position.set(pos.x, pos.y + 5.2, pos.z);
-                dummy.rotation.set(0, baseRot, 0);
-                dummy.updateMatrix();
-                planeMats.push(dummy.matrix.clone());
-
-                dummy.rotation.set(0, baseRot + Math.PI / 2, 0);
-                dummy.updateMatrix();
-                planeMats.push(dummy.matrix.clone());
-
-                const sc = 1.0 + (i % 3) * 0.12;
-                dummy.position.set(pos.x, pos.y + 5.4, pos.z);
-                dummy.rotation.set(0, 0, 0);
-                dummy.scale.set(1.25 * sc, 0.82 * sc, 1.25 * sc);
-                dummy.updateMatrix();
-                crownMats.push(dummy.matrix.clone());
+                const sc = 0.92 + (i % 4) * 0.14;
+                // 3 planos cruzados a 60° + 1 plano inclinado de copa superior (100% orgánico, sin esfera)
+                for (let pIdx = 0; pIdx < 3; pIdx++) {
+                    dummy.position.set(pos.x, groundSurfaceY + 4.9 * sc, pos.z);
+                    dummy.rotation.set((pIdx - 1) * 0.12, baseRot + (pIdx * Math.PI) / 3, 0);
+                    dummy.scale.set(sc, sc, sc);
+                    dummy.updateMatrix();
+                    planeMats.push(dummy.matrix.clone());
+                }
             });
         }
 
@@ -1353,21 +1625,297 @@ class HorizonWorldBuilder {
 
         addInst(trunkGeo, trunkMat, trunkMats);
         addInst(crossedPlaneGeo, crossedPlaneMat, planeMats);
-        addInst(crownGeo, softCanopyMat, crownMats);
 
-        const petalCount = 480;
+        const petalCount = 360;
         const petalGeo = new THREE.BufferGeometry();
         const petalPositions = new Float32Array(petalCount * 3);
         for (let i = 0; i < petalCount; i++) {
             const pt = this.trackPoints[i % this.trackPoints.length];
-            petalPositions[i * 3] = pt.x + (Math.random() - 0.5) * 42;
-            petalPositions[i * 3 + 1] = pt.y + 2 + Math.random() * 18;
-            petalPositions[i * 3 + 2] = pt.z + (Math.random() - 0.5) * 42;
+            petalPositions[i * 3] = pt.x + (Math.random() - 0.5) * 40;
+            petalPositions[i * 3 + 1] = pt.y + 1.5 + Math.random() * 14;
+            petalPositions[i * 3 + 2] = pt.z + (Math.random() - 0.5) * 40;
         }
         petalGeo.setAttribute('position', new THREE.BufferAttribute(petalPositions, 3));
-        const petalMat = new THREE.PointsMaterial({ color: 0xf9a8d4, size: 0.55, transparent: true, opacity: 0.85 });
+        const petalMat = new THREE.PointsMaterial({
+            color: 0xfbcfe8,
+            map: this.textures.roundParticle,
+            alphaTest: 0.15,
+            size: 0.65,
+            transparent: true,
+            opacity: 0.88,
+            depthWrite: false
+        });
         this.sakuraParticles = new THREE.Points(petalGeo, petalMat);
         this.worldGroup.add(this.sakuraParticles);
+    }
+
+    /**
+     * Construye el Complejo Oficial de Autódromo Peruano (inspirado en las fotos de RACING.PE
+     * de Arequipa, Trujillo, Cusco y Puno): Edificio de Boxes (Pit Lane), Torre de Control,
+     * Tribunas Techadas y Barreras de Neumáticos Rojos/Blancos en las trampas de arena.
+     */
+    buildPeruvianAutodromeComplex(mapConfig) {
+        const p0 = this.trackPoints[8];
+        const p1 = this.trackPoints[9];
+        const tangent = new THREE.Vector3().subVectors(p1, p0).normalize();
+        const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+        const angle = Math.atan2(tangent.x, tangent.z);
+
+        const pitGroup = new THREE.Group();
+        const pitPos = new THREE.Vector3().copy(p0).addScaledVector(right, -(this.roadWidth * 0.5 + 14.5));
+        pitGroup.position.set(pitPos.x, p0.y - 0.1, pitPos.z);
+        pitGroup.rotation.y = angle;
+
+        const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35, metalness: 0.15 });
+        const darkGlassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.15, metalness: 0.85 });
+        const redAccentMat = new THREE.MeshStandardMaterial({
+            color: mapConfig.curbStyle === 'cyan_white' ? 0x0891b2 : 0xdc2626,
+            roughness: 0.4
+        });
+
+        // 1. Edificio Principal de Boxes (Pit Garages) de 78m de largo
+        const mainBld = new THREE.Mesh(new THREE.BoxGeometry(12, 7.5, 78), whiteMat);
+        mainBld.position.set(0, 3.75, 0);
+        mainBld.castShadow = true;
+        mainBld.receiveShadow = true;
+        pitGroup.add(mainBld);
+
+        // Franja superior RACING.PE y visera de boxes
+        const fascia = new THREE.Mesh(new THREE.BoxGeometry(12.6, 1.4, 80), redAccentMat);
+        fascia.position.set(0, 7.6, 0);
+        pitGroup.add(fascia);
+
+        // Ventanal VIP en segundo piso
+        const vipGlass = new THREE.Mesh(new THREE.BoxGeometry(12.3, 2.2, 72), darkGlassMat);
+        vipGlass.position.set(0, 5.4, 0);
+        pitGroup.add(vipGlass);
+
+        // 8 Puertas de Garaje de Boxes hacia la pista
+        for (let b = -3; b <= 3; b++) {
+            const bayDoor = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.2, 6.8), darkGlassMat);
+            bayDoor.position.set(6.0, 1.6, b * 9.8);
+            pitGroup.add(bayDoor);
+        }
+
+        // 2. Torre de Control de Carrera (Race Control Tower)
+        const towerBase = new THREE.Mesh(new THREE.BoxGeometry(9, 18, 9), whiteMat);
+        towerBase.position.set(-2, 9, -44);
+        towerBase.castShadow = true;
+        pitGroup.add(towerBase);
+
+        const towerCabin = new THREE.Mesh(new THREE.BoxGeometry(11.5, 4.5, 11.5), darkGlassMat);
+        towerCabin.position.set(-2, 16.5, -44);
+        pitGroup.add(towerCabin);
+
+        const towerRoof = new THREE.Mesh(new THREE.BoxGeometry(12.5, 1.1, 12.5), redAccentMat);
+        towerRoof.position.set(-2, 19.2, -44);
+        pitGroup.add(towerRoof);
+
+        // 3. Tribuna Techada Frente a Boxes (lado opuesto de la recta principal)
+        const grandStandGroup = new THREE.Group();
+        const standPos = new THREE.Vector3().copy(p0).addScaledVector(right, this.roadWidth * 0.5 + 15.5);
+        grandStandGroup.position.set(standPos.x, p0.y - 0.1, standPos.z);
+        grandStandGroup.rotation.y = angle;
+
+        for (let step = 0; step < 5; step++) {
+            const tier = new THREE.Mesh(
+                new THREE.BoxGeometry(2.2, 1.2 + step * 1.1, 68),
+                step % 2 === 0 ? whiteMat : redAccentMat
+            );
+            tier.position.set(step * 2.1, (1.2 + step * 1.1) * 0.5, 0);
+            tier.castShadow = true;
+            grandStandGroup.add(tier);
+        }
+
+        const canopy = new THREE.Mesh(new THREE.BoxGeometry(13.5, 0.6, 70), whiteMat);
+        canopy.position.set(4.2, 9.5, 0);
+        canopy.rotation.z = 0.12;
+        grandStandGroup.add(canopy);
+
+        this.worldGroup.add(pitGroup);
+        this.worldGroup.add(grandStandGroup);
+
+        // 4. Barreras de Neumáticos Rojos y Blancos (Tire Walls) en las Trampas de Arena de las curvas
+        const tireGeo = new THREE.CylinderGeometry(0.62, 0.62, 1.35, 10);
+        const redTireMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.85 });
+        const whiteTireMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.85 });
+        const redTireMats = [];
+        const whiteTireMats = [];
+        const dummy = new THREE.Object3D();
+
+        for (let i = 0; i < this.trackPoints.length; i += 3) {
+            if (this.trackCurvatures[i] > 0.016) {
+                const pt = this.trackPoints[i];
+                const ptNext = this.trackPoints[(i + 1) % this.trackPoints.length];
+                const tan = new THREE.Vector3().subVectors(ptNext, pt).normalize();
+                const rVec = new THREE.Vector3().crossVectors(tan, new THREE.Vector3(0, 1, 0)).normalize();
+
+                [-1, 1].forEach((side) => {
+                    const tPos = new THREE.Vector3().copy(pt).addScaledVector(rVec, side * (this.roadWidth * 0.5 + 8.5));
+                    dummy.position.set(tPos.x, pt.y + 0.55, tPos.z);
+                    dummy.rotation.set(0, 0, 0);
+                    dummy.updateMatrix();
+                    if ((i + (side > 0 ? 1 : 0)) % 2 === 0) {
+                        redTireMats.push(dummy.matrix.clone());
+                    } else {
+                        whiteTireMats.push(dummy.matrix.clone());
+                    }
+                });
+            }
+        }
+
+        if (redTireMats.length > 0) {
+            const instRed = new THREE.InstancedMesh(tireGeo, redTireMat, redTireMats.length);
+            redTireMats.forEach((m, idx) => instRed.setMatrixAt(idx, m));
+            instRed.instanceMatrix.needsUpdate = true;
+            this.worldGroup.add(instRed);
+        }
+        if (whiteTireMats.length > 0) {
+            const instWhite = new THREE.InstancedMesh(tireGeo, whiteTireMat, whiteTireMats.length);
+            whiteTireMats.forEach((m, idx) => instWhite.setMatrixAt(idx, m));
+            instWhite.instanceMatrix.needsUpdate = true;
+            this.worldGroup.add(instWhite);
+        }
+    }
+
+    /**
+     * Escenario Perú 1 (Autódromo Arequipa & Trujillo):
+     * Volcán Misti nevado al fondo, dunas de arena dorada y costa azul del Océano Pacífico.
+     */
+    buildVolcanMistiAndPacific() {
+        // 1. Volcán Misti (Arequipa) - Cono simétrico icónico con cumbre nevada
+        const mistiGroup = new THREE.Group();
+        mistiGroup.position.set(-480, -2, -590);
+
+        const coneGeo = new THREE.ConeGeometry(340, 235, 32);
+        const coneMat = new THREE.MeshStandardMaterial({ color: 0x6b5344, roughness: 0.9 });
+        const coneMesh = new THREE.Mesh(coneGeo, coneMat);
+        coneMesh.position.y = 117;
+        mistiGroup.add(coneMesh);
+
+        const snowGeo = new THREE.ConeGeometry(118, 82, 32);
+        const snowMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 });
+        const snowMesh = new THREE.Mesh(snowGeo, snowMat);
+        snowMesh.position.y = 194;
+        mistiGroup.add(snowMesh);
+
+        // Volcán Chachani adyacente
+        const chachaniMesh = new THREE.Mesh(new THREE.ConeGeometry(280, 185, 24), coneMat);
+        chachaniMesh.position.set(290, 92, -40);
+        mistiGroup.add(chachaniMesh);
+
+        this.worldGroup.add(mistiGroup);
+
+        // 2. Bahía Costera del Pacífico (Trujillo / Huanchaco) en el horizonte oriental
+        const oceanGeo = new THREE.PlaneGeometry(2600, 950);
+        const oceanMat = new THREE.MeshStandardMaterial({
+            color: 0x0284c7,
+            roughness: 0.18,
+            metalness: 0.65
+        });
+        const ocean = new THREE.Mesh(oceanGeo, oceanMat);
+        ocean.rotation.x = -Math.PI / 2;
+        ocean.position.set(0, -0.45, 880);
+        this.worldGroup.add(ocean);
+
+        // 3. Dunas de Arena Dorada instanciadas alrededor del circuito
+        const duneGeo = new THREE.ConeGeometry(38, 14, 12);
+        const duneMat = new THREE.MeshStandardMaterial({
+            map: this.textures.sandDesert,
+            roughness: 0.92
+        });
+        const duneMats = [];
+        const dummy = new THREE.Object3D();
+
+        for (let i = 5; i < this.trackPoints.length; i += 9) {
+            const p = this.trackPoints[i];
+            const pNext = this.trackPoints[(i + 1) % this.trackPoints.length];
+            const tangent = new THREE.Vector3().subVectors(pNext, p).normalize();
+            const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+            [-1, 1].forEach((side) => {
+                const dist = this.roadWidth * 0.5 + 42 + ((i * 11) % 35);
+                const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * dist);
+                const sc = 0.8 + (i % 4) * 0.35;
+                dummy.position.set(pos.x, (14 * sc * 0.4) - 1.2, pos.z);
+                dummy.rotation.set(0, i * 0.4, 0);
+                dummy.scale.set(sc * 1.4, sc * 0.65, sc);
+                dummy.updateMatrix();
+                duneMats.push(dummy.matrix.clone());
+            });
+        }
+
+        const instDunes = new THREE.InstancedMesh(duneGeo, duneMat, duneMats.length);
+        instDunes.receiveShadow = true;
+        duneMats.forEach((m, idx) => instDunes.setMatrixAt(idx, m));
+        instDunes.instanceMatrix.needsUpdate = true;
+        this.worldGroup.add(instDunes);
+    }
+
+    /**
+     * Escenario Perú 2 (Autódromo Cusco & Lago Titicaca - Puno):
+     * Gran Lago Titicaca azul profundo, laderas andinas y casas tradicionales de ladrillo/teja terracota.
+     */
+    buildLakeTiticacaAndAndeanTown() {
+        // 1. Espejo de agua del Lago Titicaca (Puno)
+        const lakeGeo = new THREE.PlaneGeometry(2400, 1050);
+        const lakeMat = new THREE.MeshStandardMaterial({
+            color: 0x0369a1,
+            roughness: 0.14,
+            metalness: 0.72
+        });
+        const lake = new THREE.Mesh(lakeGeo, lakeMat);
+        lake.rotation.x = -Math.PI / 2;
+        lake.position.set(0, -0.42, -820);
+        this.worldGroup.add(lake);
+
+        // 2. Viviendas Andinas de Ladrillo y Tejado Terracota (estilo Cusco / Puno en las fotos aéreas)
+        const wallGeo = new THREE.BoxGeometry(9.5, 6.2, 8.5);
+        const roofGeo = new THREE.ConeGeometry(7.2, 3.2, 4);
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xc26d48, roughness: 0.85 });
+        const roofMat = new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.75 });
+
+        const wallMats = [];
+        const roofMats = [];
+        const dummy = new THREE.Object3D();
+
+        for (let i = 6; i < this.trackPoints.length; i += 6) {
+            if (i < 22 || i > 338) continue; // Dejar libre la zona de Boxes
+            const p = this.trackPoints[i];
+            const pNext = this.trackPoints[(i + 1) % this.trackPoints.length];
+            const tangent = new THREE.Vector3().subVectors(pNext, p).normalize();
+            const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+            [-1, 1].forEach((side) => {
+                const dist = this.roadWidth * 0.5 + 32 + ((i * 7) % 28);
+                const pos = new THREE.Vector3().copy(p).addScaledVector(right, side * dist);
+                const rotY = Math.atan2(tangent.x, tangent.z);
+
+                dummy.position.set(pos.x, 2.5, pos.z);
+                dummy.rotation.set(0, rotY, 0);
+                dummy.scale.set(1, 1, 1);
+                dummy.updateMatrix();
+                wallMats.push(dummy.matrix.clone());
+
+                dummy.position.set(pos.x, 7.1, pos.z);
+                dummy.rotation.set(0, rotY + Math.PI / 4, 0);
+                dummy.updateMatrix();
+                roofMats.push(dummy.matrix.clone());
+            });
+        }
+
+        const instWalls = new THREE.InstancedMesh(wallGeo, wallMat, wallMats.length);
+        instWalls.castShadow = true;
+        instWalls.receiveShadow = true;
+        wallMats.forEach((m, idx) => instWalls.setMatrixAt(idx, m));
+        instWalls.instanceMatrix.needsUpdate = true;
+        this.worldGroup.add(instWalls);
+
+        const instRoofs = new THREE.InstancedMesh(roofGeo, roofMat, roofMats.length);
+        instRoofs.castShadow = true;
+        roofMats.forEach((m, idx) => instRoofs.setMatrixAt(idx, m));
+        instRoofs.instanceMatrix.needsUpdate = true;
+        this.worldGroup.add(instRoofs);
     }
 
     createCarMesh(carConfig, isPolice = false) {
@@ -1752,8 +2300,9 @@ class HorizonWorldBuilder {
         if (this.sakuraParticles) {
             const posAttr = this.sakuraParticles.geometry.attributes.position;
             for (let i = 0; i < posAttr.count; i++) {
-                let y = posAttr.getY(i) - dt * 2.2;
-                if (y < 0) y = 18;
+                const pt = this.trackPoints[i % numPts];
+                let y = posAttr.getY(i) - dt * 1.9;
+                if (y < pt.y + 0.4) y = pt.y + 14.5;
                 posAttr.setY(i, y);
             }
             posAttr.needsUpdate = true;

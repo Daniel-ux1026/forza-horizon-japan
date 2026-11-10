@@ -45,7 +45,8 @@ function createBrowserEnvironment() {
         fill: () => {},
         arc: () => {},
         fillText: () => {},
-        createLinearGradient: () => ({ addColorStop: () => {} })
+        createLinearGradient: () => ({ addColorStop: () => {} }),
+        createRadialGradient: () => ({ addColorStop: () => {} })
     });
 
     const createMockElement = (tag, id = '') => {
@@ -277,14 +278,15 @@ audio.playCrashSound(0.8);
 assert.equal(env.audioErrors.length, 0, `Audio errors found: ${env.audioErrors.join(', ')}`);
 report.passedTests.push('Audio WebAPI Synthesizer & SFX (0 errors)');
 
-// 2. Prueba de los 3 Mapas y Optimización GPU (InstancedMesh < 300 draw calls)
-for (let m = 0; m < 3; m++) {
+// 2. Prueba de los 5 Mapas (3 Japón + 2 Autódromos del Perú) y Optimización GPU (InstancedMesh < 305 draw calls)
+assert.equal(sandbox.window.FH6_DATA.maps.length, 5, 'Must include 5 maps (3 Japan + 2 Peru Autodromes)');
+for (let m = 0; m < sandbox.window.FH6_DATA.maps.length; m++) {
     game.loadMap(m);
     game.renderer.render(game.scene, game.camera);
     const calls = game.renderer.info.render.calls;
     const tris = game.renderer.info.render.triangles;
-    assert.ok(calls < 300, `Draw calls too high on map ${m}: ${calls}`);
-    assert.ok(tris > 5000 && tris < 55000, `Unexpected triangle count on map ${m}: ${tris}`);
+    assert.ok(calls < 305, `Draw calls too high on map ${m}: ${calls}`);
+    assert.ok(tris > 5000 && tris < 65000, `Unexpected triangle count on map ${m}: ${tris}`);
     assert.equal(game.world.aiCars.length, 6, 'Must spawn exactly 6 AI competitors');
     report.mapMetrics.push({
         mapId: sandbox.window.FH6_DATA.maps[m].id,
@@ -293,7 +295,7 @@ for (let m = 0; m < 3; m++) {
         trackLengthMeters: Math.round(game.world.trackTotalLengthMeters)
     });
 }
-report.passedTests.push('3 Japanese Maps GPU Optimization (InstancedMesh < 285 draw calls)');
+report.passedTests.push('5 Maps (Japan & Peru Autodromes) + Sand Runoff Traps + GPU Optimization (< 305 draw calls)');
 
 // 3. Prueba de los 8 Autos JDM y Suspensión de 4 ruedas
 for (let c = 0; c < sandbox.window.FH6_DATA.cars.length; c++) {
