@@ -10,8 +10,13 @@ class HorizonAudioManager {
         this.tracks = [...window.FH6_DATA.tracks];
         this.currentTrackIndex = 0;
         this.isPlayingMusic = true;
+        this.masterVolume = 0.85;
         this.musicVolume = 0.48;
-        this.sfxVolume = 0.42;
+        this.sfxVolume = 0.50;
+        this.isMuted = false;
+        this.menuContext = 'welcome'; // 'welcome' | 'main_menu' | 'garage' | 'racing'
+
+        this.loadSavedAudioSettings();
 
         this.customAudioElement = new Audio();
         this.customAudioElement.crossOrigin = 'anonymous';
@@ -19,6 +24,7 @@ class HorizonAudioManager {
 
         this.analyser = null;
         this.freqData = new Uint8Array(16);
+        this.musicLowpassFilter = null;
 
         this.sequencerTimer = null;
         this.stepIndex = 0;
@@ -40,6 +46,49 @@ class HorizonAudioManager {
         });
     }
 
+    loadSavedAudioSettings() {
+        try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+                const raw = window.localStorage.getItem('fh6_audio_settings_v2');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (typeof parsed.masterVolume === 'number') this.masterVolume = Math.max(0, Math.min(1, parsed.masterVolume));
+                    if (typeof parsed.musicVolume === 'number') this.musicVolume = Math.max(0, Math.min(1, parsed.musicVolume));
+                    if (typeof parsed.sfxVolume === 'number') this.sfxVolume = Math.max(0, Math.min(1, parsed.sfxVolume));
+                    if (typeof parsed.isMuted === 'boolean') this.isMuted = parsed.isMuted;
+                    if (typeof parsed.currentTrackIndex === 'number' && parsed.currentTrackIndex >= 0 && parsed.currentTrackIndex < this.tracks.length) {
+                        this.currentTrackIndex = parsed.currentTrackIndex;
+                    }
+                }
+            }
+        } catch (e) {}
+    }
+
+    saveAudioSettings() {
+        try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+                window.localStorage.setItem('fh6_audio_settings_v2', JSON.stringify({
+                    masterVolume: this.masterVolume,
+                    musicVolume: this.musicVolume,
+                    sfxVolume: this.sfxVolume,
+                    isMuted: this.isMuted,
+                    currentTrackIndex: this.currentTrackIndex
+                }));
+            }
+        } catch (e) {}
+    }
+
+    getEffectiveMusicGain() {
+        if (this.isMuted) return 0.0001;
+        const contextMult = this.menuContext === 'garage' ? 0.72 : (this.menuContext === 'welcome' ? 0.90 : 1.0);
+        return Math.max(0.0001, this.masterVolume * this.musicVolume * contextMult);
+    }
+
+    getEffectiveSfxGain() {
+        if (this.isMuted) return 0.0;
+        return Math.max(0, this.masterVolume * this.sfxVolume);
+    }
+
     init() {
         if (this.isInitialized) {
             if (this.ctx && this.ctx.state === 'suspended') {
@@ -56,9 +105,14 @@ class HorizonAudioManager {
         this.analyser.fftSize = 64;
         this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
 
+        this.musicLowpassFilter = this.ctx.createBiquadFilter();
+        this.musicLowpassFilter.type = 'lowpass';
+        this.musicLowpassFilter.frequency.value = 18000;
+
         this.musicMasterGain = this.ctx.createGain();
-        this.musicMasterGain.gain.value = this.musicVolume;
-        this.musicMasterGain.connect(this.analyser);
+        this.musicMasterGain.gain.value = this.getEffectiveMusicGain();
+        this.musicMasterGain.connect(this.musicLowpassFilter);
+        this.musicLowpassFilter.connect(this.analyser);
         this.analyser.connect(this.ctx.destination);
 
         try {
@@ -153,10 +207,11 @@ class HorizonAudioManager {
         this.engineOsc2.frequency.setTargetAtTime(freq2, now, 0.035);
         this.engineFilter.frequency.setTargetAtTime(240 + rpmRatio * 1550 + (throttle ? 340 : 0), now, 0.045);
 
-        const targetEngineVol = (0.045 + rpmRatio * 0.095 + (throttle ? 0.045 : 0)) * this.sfxVolume;
-        this.engineGain.gain.setTargetAtTime(targetEngineVol, now, 0.05);
+        const sfxVol = this.getEffectiveSfxGain();
+        const targetEngineVol = (0.045 + rpmRatio * 0.095 + (throttle ? 0.045 : 0)) * sfxVol;
+        this.engineGain.gain.setTargetAtTime(Math.max(0.0001, targetEngineVol), now, 0.05);
 
-        const targetDriftVol = isDrifting ? 0.10 * this.sfxVolume : 0.0001;
+        const targetDriftVol = isDrifting ? Math.max(0.0001, 0.10 * sfxVol) : 0.0001;
         this.driftGain.gain.setTargetAtTime(targetDriftVol, now, 0.07);
 
         // Modular sirena policial según distancia
@@ -164,9 +219,107 @@ class HorizonAudioManager {
             const sirenWave = Math.sin(now * 6.5) * 240 + 760;
             this.sirenOsc.frequency.setTargetAtTime(sirenWave, now, 0.03);
             const prox = Math.max(0, 1 - policeDistance / 120);
-            this.sirenGain.gain.setTargetAtTime(prox * 0.045 * this.sfxVolume, now, 0.08);
+            this.sirenGain.gain.setTargetAtTime(Math.max(0.0001, prox * 0.045 * sfxVol), now, 0.08);
         } else {
             this.sirenGain.gain.setTargetAtTime(0.0001, now, 0.08);
+        }
+    }
+
+    // Efectos de sonido de interfaz (Hover, Confirmar, Volver y Rugido de Motor en Garaje)
+    playUiHover() {
+        if (!this.isInitialized || !this.ctx || this.isMuted) return;
+        const sfxVol = this.getEffectiveSfxGain();
+        if (sfxVol <= 0.001) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(720, now);
+        osc.frequency.exponentialRampToValueAtTime(1080, now + 0.045);
+        gain.gain.setValueAtTime(0.07 * sfxVol, now);
+        gain.gain.exponentialRampToValueAtTime(0.0005, now + 0.05);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.055);
+    }
+
+    playUiConfirm() {
+        this.init();
+        if (!this.ctx || this.isMuted) return;
+        const sfxVol = this.getEffectiveSfxGain();
+        if (sfxVol <= 0.001) return;
+        const now = this.ctx.currentTime;
+        [523.25, 783.99].forEach((freq, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.05);
+            gain.gain.setValueAtTime(0.14 * sfxVol, now + idx * 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.0008, now + idx * 0.05 + 0.16);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now + idx * 0.05);
+            osc.stop(now + idx * 0.05 + 0.17);
+        });
+    }
+
+    playUiBack() {
+        if (!this.isInitialized || !this.ctx || this.isMuted) return;
+        const sfxVol = this.getEffectiveSfxGain();
+        if (sfxVol <= 0.001) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(310, now + 0.11);
+        gain.gain.setValueAtTime(0.11 * sfxVol, now);
+        gain.gain.exponentialRampToValueAtTime(0.0008, now + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.13);
+    }
+
+    playEngineRevPreview(baseFreq = 75) {
+        this.init();
+        if (!this.ctx || this.isMuted) return;
+        const sfxVol = this.getEffectiveSfxGain();
+        if (sfxVol <= 0.001) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const filter = this.ctx.createBiquadFilter();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(baseFreq * 1.1, now);
+        osc.frequency.exponentialRampToValueAtTime(baseFreq * 2.8, now + 0.18);
+        osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.2, now + 0.44);
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(600, now);
+        filter.frequency.exponentialRampToValueAtTime(1950, now + 0.18);
+        filter.frequency.exponentialRampToValueAtTime(480, now + 0.44);
+        gain.gain.setValueAtTime(0.12 * sfxVol, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.46);
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.47);
+    }
+
+    // Transición ambiental del audio según pantalla (Welcome, Main Menu, Garage, Racing)
+    setMenuMusicContext(context) {
+        this.menuContext = context || 'main_menu';
+        if (!this.isInitialized || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        if (this.musicMasterGain) {
+            this.musicMasterGain.gain.setTargetAtTime(this.getEffectiveMusicGain(), now, 0.18);
+        }
+        if (this.musicLowpassFilter) {
+            // En el garaje y opciones aplicamos un filtro ambiental cálido de showroom; en menú y carrera espectro completo
+            const targetCutoff = (context === 'garage') ? 2600 : (context === 'welcome' ? 6800 : 18000);
+            this.musicLowpassFilter.frequency.setTargetAtTime(targetCutoff, now, 0.25);
         }
     }
 
@@ -432,11 +585,57 @@ class HorizonAudioManager {
         }
     }
 
-    setMusicVolume(val) {
-        this.musicVolume = Math.max(0, Math.min(1, parseFloat(val)));
-        if (this.musicMasterGain && this.ctx) {
-            this.musicMasterGain.gain.setTargetAtTime(this.musicVolume, this.ctx.currentTime, 0.05);
+    setMasterVolume(val) {
+        const parsed = parseFloat(val);
+        if (!Number.isNaN(parsed)) {
+            this.masterVolume = Math.max(0, Math.min(1, parsed));
         }
+        if (this.musicMasterGain && this.ctx) {
+            this.musicMasterGain.gain.setTargetAtTime(this.getEffectiveMusicGain(), this.ctx.currentTime, 0.06);
+        }
+        this.saveAudioSettings();
+        this.updateRadioUI();
+    }
+
+    setMusicVolume(val) {
+        const parsed = parseFloat(val);
+        if (!Number.isNaN(parsed)) {
+            this.musicVolume = Math.max(0, Math.min(1, parsed));
+        }
+        if (this.musicMasterGain && this.ctx) {
+            this.musicMasterGain.gain.setTargetAtTime(this.getEffectiveMusicGain(), this.ctx.currentTime, 0.06);
+        }
+        this.saveAudioSettings();
+        this.updateRadioUI();
+    }
+
+    setSfxVolume(val) {
+        const parsed = parseFloat(val);
+        if (!Number.isNaN(parsed)) {
+            this.sfxVolume = Math.max(0, Math.min(1, parsed));
+        }
+        this.saveAudioSettings();
+        this.updateRadioUI();
+    }
+
+    setMuted(muted) {
+        this.isMuted = Boolean(muted);
+        if (this.musicMasterGain && this.ctx) {
+            this.musicMasterGain.gain.setTargetAtTime(this.getEffectiveMusicGain(), this.ctx.currentTime, 0.06);
+        }
+        if (this.isMuted && this.ctx && this.engineGain) {
+            const now = this.ctx.currentTime;
+            this.engineGain.gain.setTargetAtTime(0.0001, now, 0.05);
+            this.driftGain.gain.setTargetAtTime(0.0001, now, 0.05);
+            this.sirenGain.gain.setTargetAtTime(0.0001, now, 0.05);
+        }
+        this.saveAudioSettings();
+        this.updateRadioUI();
+    }
+
+    toggleMute() {
+        this.setMuted(!this.isMuted);
+        return this.isMuted;
     }
 
     addCustomFiles(fileList) {
@@ -489,6 +688,13 @@ class HorizonAudioManager {
         document.querySelectorAll('.js-track-artist').forEach(el => { el.textContent = track.artist; });
         document.querySelectorAll('.js-track-genre').forEach(el => { el.textContent = track.genre; });
         document.querySelectorAll('.js-play-toggle').forEach(el => { el.textContent = this.isPlayingMusic ? '⏸' : '▶'; });
+        document.querySelectorAll('.js-mute-toggle').forEach(el => {
+            el.textContent = this.isMuted ? '🔇 Silenciado (Activar)' : '🔊 Audio Activo (Silenciar)';
+            el.classList.toggle('is-muted', this.isMuted);
+        });
+        document.querySelectorAll('.js-master-volume').forEach(el => { el.value = String(this.masterVolume); });
+        document.querySelectorAll('.js-music-volume').forEach(el => { el.value = String(this.musicVolume); });
+        document.querySelectorAll('.js-sfx-volume').forEach(el => { el.value = String(this.sfxVolume); });
         document.querySelectorAll('.js-track-select').forEach(el => {
             if (el.value !== String(this.currentTrackIndex)) {
                 el.value = String(this.currentTrackIndex);
