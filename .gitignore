@@ -1,3 +1,7 @@
 node_modules/
 tests/.profile/
 tests/output/
+.env
+.env.*
+.DS_Store
+Thumbs.db
