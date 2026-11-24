@@ -176,7 +176,7 @@ class HorizonGameEngine {
     initThreeJS() {
         this.scene = new THREE.Scene();
 
-        this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.5, 2000);
+        this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.5, 2400);
 
         this.renderer = new THREE.WebGLRenderer({
             canvas: this.canvas,
@@ -189,50 +189,46 @@ class HorizonGameEngine {
         this.renderer.shadowMap.enabled = !this.detectMobileDevice();
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-        this.applyQualityPreset(this.qualityPreset);
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-
         this.ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
         this.scene.add(this.ambientLight);
 
         this.dirLight = new THREE.DirectionalLight(0xffffff, 1.45);
         this.dirLight.position.set(120, 240, 100);
-        this.dirLight.castShadow = !this.detectMobileDevice();
-        if (this.dirLight.castShadow) {
-            this.dirLight.shadow.mapSize.width = 1024;
-            this.dirLight.shadow.mapSize.height = 1024;
-            this.dirLight.shadow.camera.near = 10;
-            this.dirLight.shadow.camera.far = 750;
-            this.dirLight.shadow.camera.left = -450;
-            this.dirLight.shadow.camera.right = 450;
-            this.dirLight.shadow.camera.top = 450;
-            this.dirLight.shadow.camera.bottom = -450;
-            this.dirLight.shadow.bias = -0.0006;
-        }
-        this.scene.add(this.dirLight);
+        const shadow = this.dirLight.shadow;
+        Object.assign(shadow.camera, { near: 5, far: 270, left: -65, right: 65, top: 65, bottom: -65 });
+        shadow.camera.updateProjectionMatrix();
+        shadow.bias = -0.00025;
+        shadow.normalBias = 0.045;
+        this.scene.add(this.dirLight, this.dirLight.target);
+
+        this.applyQualityPreset(this.qualityPreset);
 
         window.addEventListener('resize', () => this.onWindowResize());
     }
 
     applyQualityPreset(preset) {
         this.qualityPreset = preset;
-        const dpr = window.devicePixelRatio || 1;
-        if (preset === 'mobile') {
-            this.renderer.setPixelRatio(Math.min(dpr, 1.15));
-        } else if (preset === 'balanced') {
-            this.renderer.setPixelRatio(Math.min(dpr, 1.5));
-        } else {
-            this.renderer.setPixelRatio(Math.min(dpr, 2.0));
+        this.renderer.shadowMap.enabled = preset !== 'mobile';
+        this.dirLight.castShadow = this.renderer.shadowMap.enabled;
+        const shadow = this.dirLight.shadow;
+        const size = preset === 'high' ? 2048 : 1024;
+        if (shadow.mapSize.x !== size) {
+            shadow.mapSize.set(size, size);
+            shadow.map?.dispose();
+            shadow.map = null;
         }
+        this.onWindowResize();
         const badge = document.getElementById('quality-badge');
-        if (badge) {
-            badge.textContent = preset === 'mobile' ? 'MODO MÓVIL ASTC' : (preset === 'balanced' ? 'EQUILIBRADO' : 'ULTRA HDR PC');
-        }
+        if (badge) badge.textContent = preset === 'mobile' ? 'LIGERO' : preset === 'balanced' ? 'EQUILIBRADO' : 'ALTO';
     }
 
     onWindowResize() {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
+        const resolution = this.qualityPreset === 'high' ? 1080 : this.qualityPreset === 'balanced' ? 900 : 720;
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, resolution / window.innerHeight,
+            (resolution * 16 / 9) / window.innerWidth);
+        this.renderer.setPixelRatio(pixelRatio);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
@@ -247,6 +243,7 @@ class HorizonGameEngine {
         this.dirLight.intensity = mapData.sunIntensity;
 
         this.world.buildMap(mapData);
+        this.sunOffset = this.world.getSkyLightDirection(mapData).multiplyScalar(135);
         this.prepareStartingGrid();
 
         const mapNameEl = document.getElementById('hud-map-name');
@@ -1222,7 +1219,7 @@ class HorizonGameEngine {
             if (!completedAllLaps) {
                 titleEl.textContent = customReason || '⏱️ FIN DE LA PRUEBA';
             } else if (this.playerPositionRank === 1) {
-                titleEl.textContent = '🏆 ¡VICTORIA EN HORIZON JAPÓN! 🏆';
+                titleEl.textContent = '¡Victoria en Apex Routes!';
             } else if (this.playerPositionRank <= 3) {
                 titleEl.textContent = `🥈 ¡PODIO CONSEGUIDO (${this.playerPositionRank}º PUESTO)!`;
             } else {
@@ -1719,7 +1716,6 @@ class HorizonGameEngine {
         };
 
         if (car) {
-            setTxt('welcome-showcase-car', car.name);
             setTxt('menu-active-car-name', car.name);
             setTxt('menu-active-car-class', car.classRating);
             setTxt('menu-active-car-cat', car.category);
@@ -2025,7 +2021,8 @@ class HorizonGameEngine {
                 card.setAttribute('data-map-id', map.id);
                 card.innerHTML = `
                     <div class="map-card-preview-wrap">
-                        <img class="map-card-preview-img" src="${previewUrl}" alt="${map.name}" />
+                        <img class="map-card-preview-img" src="assets/circuits/${map.id}.jpg" alt="" loading="lazy" />
+                        <img class="map-card-route" src="${previewUrl}" alt="Trazado del circuito" />
                     </div>
                     <div class="map-card-body">
                         <div class="map-region-title">${regionHeader}</div>
@@ -2384,6 +2381,10 @@ class HorizonGameEngine {
                 this.turntablePitch
             );
         } else {
+            if (this.sunOffset) {
+                this.dirLight.target.position.copy(this.carPos);
+                this.dirLight.position.copy(this.carPos).add(this.sunOffset);
+            }
             this.renderer.render(this.scene, this.camera);
         }
         requestAnimationFrame((t) => this.gameLoop(t));

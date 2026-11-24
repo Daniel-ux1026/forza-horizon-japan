@@ -3,12 +3,12 @@
    ========================================================================== */
 
 :root {
-    --fh-pink: #f43f5e;
-    --fh-cyan: #00e5ff;
+    --fh-pink: #e57652;
+    --fh-cyan: #85e5d1;
     --fh-amber: #facc15;
     --fh-green: #22c55e;
-    --fh-dark: rgba(9, 13, 24, 0.85);
-    --fh-panel: rgba(15, 23, 42, 0.88);
+    --fh-dark: rgba(10, 22, 24, 0.88);
+    --fh-panel: rgba(17, 33, 37, 0.93);
     --fh-border: rgba(255, 255, 255, 0.15);
     --fh-text: #f8fafc;
     --fh-muted: #94a3b8;
@@ -1008,217 +1008,6 @@ html, body {
     transition: opacity 0.35s ease;
 }
 
-/* Partículas y Neones Sutiles de la Pantalla de Bienvenida */
-.welcome-neon-particles {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    overflow: hidden;
-    z-index: 0;
-}
-
-.neon-orb {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(65px);
-    opacity: 0.38;
-    animation: floatOrb 8s ease-in-out infinite alternate;
-}
-
-.orb-cyan {
-    width: 340px;
-    height: 340px;
-    background: #00e5ff;
-    top: 10%;
-    left: 12%;
-}
-
-.orb-violet {
-    width: 380px;
-    height: 380px;
-    background: #a855f7;
-    bottom: 12%;
-    right: 14%;
-    animation-delay: -3s;
-}
-
-.orb-crimson {
-    width: 290px;
-    height: 290px;
-    background: #f43f5e;
-    top: 22%;
-    right: 22%;
-    animation-delay: -5s;
-}
-
-@keyframes floatOrb {
-    from { transform: translate(0, 0) scale(1); }
-    to { transform: translate(24px, -18px) scale(1.12); }
-}
-
-.neon-spark {
-    position: absolute;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: #00e5ff;
-    box-shadow: 0 0 12px #00e5ff, 0 0 24px #f43f5e;
-    animation: riseSpark 6s linear infinite;
-}
-.neon-spark.s1 { left: 18%; bottom: 10%; animation-duration: 5.5s; }
-.neon-spark.s2 { left: 34%; bottom: 15%; animation-duration: 7.2s; background: #f43f5e; }
-.neon-spark.s3 { left: 52%; bottom: 8%; animation-duration: 6.1s; }
-.neon-spark.s4 { left: 68%; bottom: 18%; animation-duration: 5.8s; background: #a855f7; }
-.neon-spark.s5 { left: 82%; bottom: 12%; animation-duration: 6.7s; }
-.neon-spark.s6 { left: 45%; bottom: 22%; animation-duration: 7.5s; background: #facc15; }
-
-@keyframes riseSpark {
-    0% { transform: translateY(0) scale(0.8); opacity: 0; }
-    25% { opacity: 0.9; }
-    80% { opacity: 0.7; }
-    100% { transform: translateY(-280px) scale(1.3); opacity: 0; }
-}
-
-.welcome-top-bar, .welcome-bottom-bar {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 12px;
-    font-size: 12px;
-    color: #cbd5e1;
-}
-
-.aaa-edition-pill, .aaa-tech-pill {
-    background: rgba(15, 23, 42, 0.78);
-    border: 1px solid rgba(0, 229, 255, 0.38);
-    color: var(--fh-cyan);
-    padding: 6px 14px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 1.4px;
-    backdrop-filter: blur(8px);
-}
-
-.aaa-tech-pill {
-    border-color: rgba(244, 63, 94, 0.45);
-    color: #fda4af;
-}
-
-.welcome-hero-center {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    margin: auto 0;
-    gap: 14px;
-}
-
-.logo-kicker {
-    font-size: 12px;
-    font-weight: 900;
-    letter-spacing: 4px;
-    color: var(--fh-cyan);
-    text-shadow: 0 0 16px rgba(0, 229, 255, 0.75);
-}
-
-.game-hero-logo {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    line-height: 0.94;
-    transform: skewX(-10deg);
-}
-
-.game-hero-logo .logo-main {
-    font-size: clamp(46px, 8vw, 96px);
-    font-weight: 900;
-    letter-spacing: 6px;
-    color: #ffffff;
-    text-shadow: 0 0 32px rgba(0, 229, 255, 0.65), 0 6px 0 #0f172a;
-}
-
-.game-hero-logo .logo-accent {
-    font-size: clamp(28px, 4.6vw, 54px);
-    font-weight: 900;
-    letter-spacing: 4px;
-    background: linear-gradient(90deg, var(--fh-cyan), #a855f7, var(--fh-pink));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-top: 4px;
-}
-
-.game-hero-logo .logo-version {
-    margin-top: 10px;
-    font-size: 12px;
-    font-weight: 900;
-    letter-spacing: 3px;
-    background: linear-gradient(135deg, var(--fh-pink), #7e22ce);
-    color: #fff;
-    padding: 4px 16px;
-    border-radius: 6px;
-    box-shadow: 0 0 24px rgba(244, 63, 94, 0.6);
-}
-
-.welcome-tagline {
-    font-size: clamp(13px, 1.6vw, 16px);
-    color: #e2e8f0;
-    max-width: 680px;
-    background: rgba(9, 13, 24, 0.62);
-    padding: 8px 20px;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    backdrop-filter: blur(8px);
-}
-
-.btn-press-start {
-    position: relative;
-    margin-top: 18px;
-    padding: 18px 48px;
-    border-radius: 16px;
-    border: 2px solid var(--fh-cyan);
-    background: linear-gradient(135deg, rgba(244, 63, 94, 0.92), rgba(147, 51, 234, 0.92));
-    color: #ffffff;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    box-shadow: 0 0 38px rgba(244, 63, 94, 0.65), 0 0 70px rgba(0, 229, 255, 0.35);
-    transform: skewX(-8deg);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    animation: startPulse 1.6s ease-in-out infinite alternate;
-}
-
-.btn-press-start:hover, .btn-press-start:focus-visible {
-    transform: skewX(-8deg) scale(1.06) translateY(-2px);
-    box-shadow: 0 0 55px rgba(0, 229, 255, 0.95), 0 0 90px rgba(244, 63, 94, 0.8);
-    outline: none;
-}
-
-@keyframes startPulse {
-    from { box-shadow: 0 0 28px rgba(244, 63, 94, 0.55), 0 0 50px rgba(0, 229, 255, 0.28); }
-    to { box-shadow: 0 0 48px rgba(0, 229, 255, 0.85), 0 0 85px rgba(244, 63, 94, 0.75); }
-}
-
-.start-btn-text {
-    font-size: clamp(22px, 3vw, 32px);
-    font-weight: 900;
-    letter-spacing: 3px;
-}
-
-.start-btn-sub {
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 1.5px;
-    color: #bae6fd;
-}
-
 /* ==========================================================================
    MENÚ PRINCIPAL (MAIN_MENU)
    ========================================================================== */
@@ -1849,6 +1638,17 @@ html, body {
     transform: scale(1.05);
 }
 
+.map-card-route {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    width: 86px;
+    height: 49px;
+    object-fit: cover;
+    border: 1px solid #d0ede66b;
+    border-radius: 4px;
+}
+
 .map-card-body {
     padding: 12px;
     display: flex;
@@ -2097,4 +1897,147 @@ html, body {
     .menu-screen-overlay {
         padding: 16px;
     }
+}
+
+#welcome-screen {
+    padding: clamp(22px, 5vw, 76px);
+    background:
+        linear-gradient(90deg, #0a1317 0%, #0a1317eb 24%, #0a131776 48%, transparent 75%),
+        linear-gradient(0deg, #0a1317 0%, transparent 30%),
+        url('../assets/hakone-cover.jpg') 62% center / cover no-repeat;
+}
+
+.welcome-top-bar, .welcome-bottom-bar {
+    display: flex;
+    color: #d7e5df;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.11em;
+}
+
+.welcome-signature {
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--fh-pink);
+}
+
+.welcome-hero-center {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 20px;
+    margin: auto 0;
+    text-align: left;
+}
+
+.logo-kicker {
+    color: var(--fh-cyan);
+    font-weight: 800;
+    font-size: 12px;
+    letter-spacing: 0.32em;
+}
+
+.game-hero-logo {
+    display: grid;
+    font-size: clamp(58px, 11.2vw, 164px);
+    line-height: 0.76;
+    font-family: Impact, 'Arial Black', system-ui, sans-serif;
+    font-weight: 900;
+    letter-spacing: -0.025em;
+    color: #fff4df;
+}
+
+.logo-accent { color: var(--fh-cyan); }
+
+.welcome-tagline {
+    color: #e2ebe7;
+    max-width: 34ch;
+    font-size: clamp(14px, 1.45vw, 19px);
+    line-height: 1.5;
+}
+
+.btn-press-start {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    min-height: 48px;
+    padding: 11px 15px 11px 20px;
+    border: 0;
+    border-radius: 3px;
+    background: var(--fh-cyan);
+    color: #0a181b;
+    font-size: 16px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.18s;
+}
+
+.btn-press-start:hover { background: #b5f7e9; }
+.start-btn-sub { padding: 2px 7px; border: 1px solid #123a39; border-radius: 3px; }
+button:focus-visible, summary:focus-visible, select:focus-visible { outline: 2px solid #ffe3a3; outline-offset: 3px; }
+
+#main-menu-screen { background: linear-gradient(90deg, #0a1418dc, #0a141827 60%, #0a1418b8); }
+.main-menu-nav-panel, .main-menu-showcase-card, .festival-container, .loading-card {
+    background: var(--fh-dark);
+    border: 1px solid var(--fh-border);
+    border-radius: 8px;
+    box-shadow: 0 15px 56px #040c0f70;
+}
+.menu-brand-header h2 { color: #fff4df; text-shadow: none; }
+.menu-brand-header h2 span { color: var(--fh-cyan); text-shadow: none; }
+.primary-nav-btn, .btn-hud-action.primary, .btn-launch-race {
+    background: var(--fh-cyan);
+    border-color: var(--fh-cyan);
+    color: #0b1b1e;
+    box-shadow: none;
+}
+.primary-nav-btn:hover, .primary-nav-btn.active-focus { background: #a0eddd; color: #0b1b1e; }
+.primary-nav-btn small { color: #194840; }
+
+.hud-location-box, .minimap-box, .speedometer-cluster {
+    border: 1px solid #d4f9ed34;
+    border-radius: 5px;
+    background: var(--fh-dark);
+    backdrop-filter: none;
+}
+.hud-location-box { border-left: 3px solid var(--fh-cyan); }
+.hud-brand-tag { color: var(--fh-cyan); }
+.badge-pos, #hud-car-class { background: var(--fh-cyan); color: #091c20; }
+#hud-speed { font-size: clamp(42px, 5.5vw, 74px); letter-spacing: -0.075em; text-shadow: none; }
+.gear-box { border: 1px solid #d4f9ed60; border-radius: 4px; }
+.rpm-bar-track, #hud-rpm-fill { border-radius: 1px; box-shadow: none; }
+#hud-rpm-fill { background: linear-gradient(90deg, #49b7ad, #9aebda); }
+#hud-rpm-fill.redline { background: linear-gradient(90deg, #f3ce8c, #e66e5d); }
+.race-tools { background: var(--fh-dark); border: 1px solid var(--fh-border); border-radius: 5px; }
+.race-tools summary { padding: 9px 13px; cursor: pointer; font-size: 12px; font-weight: 700; }
+.race-tools .radio-widget { background: none; backdrop-filter: none; border: 0; }
+.race-tools .hud-quick-buttons { display: grid; grid-template-columns: repeat(2, 1fr); padding: 0 12px 12px; }
+.race-pause { min-height: 35px; }
+
+@media (max-width: 770px), (max-height: 530px) {
+    #welcome-screen {
+        background-image: linear-gradient(90deg, #0a1317f5, #0a131754 75%), linear-gradient(0deg, #0a1317, transparent 38%), url('../assets/hakone-cover.jpg');
+    }
+    .welcome-hero-center { gap: 12px; }
+    .game-hero-logo { font-size: clamp(52px, 10vw, 100px); }
+    .main-menu-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+    .main-menu-nav-panel, .main-menu-showcase-card { width: 100%; padding: 12px; }
+    .menu-navigation-hint, .showcase-card-badge { display: none; }
+    .showcase-quick-actions { flex-wrap: wrap; }
+    .hud-location-box { min-width: 0; max-width: 63vw; }
+    .hud-right-stack { gap: 4px; }
+    .race-tools .radio-widget { width: min(230px, 75vw); }
+    .race-tools .hud-quick-buttons .btn-hud-action { font-size: 10px; padding: 5px 6px; }
+}
+
+@media (max-width: 510px) and (orientation: portrait) {
+    .main-menu-layout { grid-template-columns: 1fr; }
+    .main-menu-showcase-card { align-self: start; }
+    #main-menu-screen { overflow-y: auto; }
+    .hud-top-bar { gap: 6px; flex-wrap: nowrap; }
+    .race-tools[open] { position: absolute; right: 10px; z-index: 2; }
+    .hud-right-stack:has(.race-tools[open]) .race-pause { margin-top: 34px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

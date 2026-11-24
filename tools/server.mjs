@@ -1,4 +1,4 @@
-// Servidor estático sin dependencias para Forza Horizon Japan.
+// Servidor estático sin dependencias para Apex Routes.
 // Uso:  node tools/server.mjs [puerto]      (por defecto 8080)
 // Escucha en 0.0.0.0 para poder abrir el juego desde un móvil Android en la misma red Wi-Fi.
 import http from 'node:http';
@@ -17,6 +17,7 @@ const MIME = {
     '.json': 'application/json; charset=utf-8',
     '.png': 'image/png',
     '.jpg': 'image/jpeg',
+    '.ico': 'image/x-icon',
     '.svg': 'image/svg+xml',
     '.mp3': 'audio/mpeg',
     '.ogg': 'audio/ogg',
@@ -27,9 +28,10 @@ export function createStaticServer() {
     return http.createServer((req, res) => {
         try {
             const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-            let filePath = path.normalize(path.join(ROOT, urlPath));
+            let filePath = path.join(ROOT, urlPath);
+            const relativePath = path.relative(ROOT, filePath);
             // Bloquear path traversal fuera de la carpeta del proyecto
-            if (!filePath.startsWith(ROOT)) {
+            if (relativePath === '..' || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
                 res.writeHead(403).end('Forbidden');
                 return;
             }
@@ -37,7 +39,7 @@ export function createStaticServer() {
                 filePath = path.join(filePath, 'index.html');
             }
             // No exponer la carpeta .git ni ficheros ocultos
-            if (path.relative(ROOT, filePath).split(path.sep).some(part => part.startsWith('.'))) {
+            if (relativePath.split(path.sep).some(part => part.startsWith('.'))) {
                 res.writeHead(404).end('Not found');
                 return;
             }
@@ -62,7 +64,7 @@ const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPat
 if (isMain) {
     const port = parseInt(process.argv[2] || process.env.PORT || '8080', 10);
     createStaticServer().listen(port, '0.0.0.0', () => {
-        console.log(`\n  Forza Horizon Japan listo:`);
+        console.log(`\n  Apex Routes listo:`);
         console.log(`  PC:      http://localhost:${port}/`);
         for (const list of Object.values(os.networkInterfaces())) {
             for (const net of list || []) {

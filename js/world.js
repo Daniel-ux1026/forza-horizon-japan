@@ -123,43 +123,20 @@ class HorizonWorldBuilder {
         neonRing.position.y = 0.068;
         this.garageTurntableGroup.add(neonRing);
 
-        // Fondo Japonés Nocturno (Silueta del Monte Fuji + Puerta Torii + Neones de Tokio + Cerezos Sakura)
-        const fujiCone = new THREE.Mesh(
-            new THREE.ConeGeometry(28, 15, 24),
-            new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.85 })
-        );
-        fujiCone.position.set(0, 6.8, -42);
-        const fujiSnow = new THREE.Mesh(
-            new THREE.ConeGeometry(10.5, 5.8, 24),
-            new THREE.MeshBasicMaterial({ color: 0xe2e8f0 })
-        );
-        fujiSnow.position.set(0, 11.5, -42);
-        this.garageShowroomScene.add(fujiCone, fujiSnow);
-
-        // Puerta Torii iluminada al fondo derecho
-        const toriiMat = new THREE.MeshBasicMaterial({ color: 0xe11d48 });
-        [-2.2, 2.2].forEach((tx) => {
-            const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 4.8, 10), toriiMat);
-            pillar.position.set(5.2 + tx * 0.65, 2.4, -12.5);
-            this.garageShowroomScene.add(pillar);
-        });
-        const toriiTop = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.35, 0.35), toriiMat);
-        toriiTop.position.set(5.2, 4.6, -12.5);
-        this.garageShowroomScene.add(toriiTop);
-
-        // Ramas de Sakura en flor enmarcando el fondo
-        if (this.textures.sakuraBranch) {
-            const sakMat = new THREE.MeshBasicMaterial({
-                map: this.textures.sakuraBranch,
-                transparent: true,
-                alphaTest: 0.2,
-                side: THREE.DoubleSide
-            });
-            [[-4.8, 3.6, -8.5], [4.8, 3.7, -8.5], [-2.5, 4.2, -10.5], [2.5, 4.2, -10.5]].forEach(([sx, sy, sz]) => {
-                const sakPlane = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 3.8), sakMat);
-                sakPlane.position.set(sx, sy, sz);
-                this.garageShowroomScene.add(sakPlane);
-            });
+        const wall = new THREE.Mesh(new THREE.PlaneGeometry(31, 8),
+            new THREE.MeshStandardMaterial({ color: 0x253237, roughness: 0.92 }));
+        wall.position.set(0, 4, -9);
+        this.garageShowroomScene.add(wall);
+        const beamGeometry = new THREE.BoxGeometry(0.16, 7, 0.26);
+        const beamMaterial = new THREE.MeshStandardMaterial({ color: 0x111a20, roughness: 0.86 });
+        const stripGeometry = new THREE.PlaneGeometry(0.038, 3);
+        const stripMaterial = new THREE.MeshBasicMaterial({ color: 0xb5eadf, toneMapped: false });
+        for (const x of [-8, -5.4, -2.8, 2.8, 5.4, 8]) {
+            const beam = new THREE.Mesh(beamGeometry, beamMaterial);
+            beam.position.set(x, 3.5, -8.88);
+            const strip = new THREE.Mesh(stripGeometry, stripMaterial);
+            strip.position.set(x + 0.14, 2.25, -8.73);
+            this.garageShowroomScene.add(beam, strip);
         }
 
         this.garageShowroomCarRoot = new THREE.Group();
@@ -334,15 +311,15 @@ class HorizonWorldBuilder {
 
     initProceduralTextures() {
         // 1. Cubemap de Entorno HDR Simulado para Reflejos Metálicos Realistas
-        const createFaceCanvas = (topCol, botCol, neonCol) => {
+        const createFaceCanvas = (topCol, botCol, highlight) => {
             const c = document.createElement('canvas');
             c.width = 128;
             c.height = 128;
             const ctx = c.getContext('2d');
             const grad = ctx.createLinearGradient(0, 0, 0, 128);
             grad.addColorStop(0, topCol);
-            grad.addColorStop(0.50, '#1e293b');
-            grad.addColorStop(0.54, neonCol);
+            grad.addColorStop(0.37, highlight);
+            grad.addColorStop(0.49, '#475468');
             grad.addColorStop(1, botCol);
             ctx.fillStyle = grad;
             ctx.fillRect(0, 0, 128, 128);
@@ -350,12 +327,12 @@ class HorizonWorldBuilder {
         };
 
         this.envMap = new THREE.CubeTexture([
-            createFaceCanvas('#090d1a', '#05070e', '#00e5ff'),
-            createFaceCanvas('#090d1a', '#05070e', '#f43f5e'),
-            createFaceCanvas('#0f172a', '#1e293b', '#38bdf8'),
-            createFaceCanvas('#05070e', '#020408', '#0f172a'),
-            createFaceCanvas('#090d1a', '#05070e', '#facc15'),
-            createFaceCanvas('#090d1a', '#05070e', '#a855f7')
+            createFaceCanvas('#26394e', '#161f28', '#b9d2e3'),
+            createFaceCanvas('#382f30', '#151823', '#e4bba3'),
+            createFaceCanvas('#536884', '#253345', '#e2edf5'),
+            createFaceCanvas('#131920', '#0b0e14', '#1e2931'),
+            createFaceCanvas('#334154', '#141c24', '#e1e9f1'),
+            createFaceCanvas('#2b3845', '#101921', '#91b6c6')
         ]);
         this.envMap.needsUpdate = true;
         this.scene.environment = this.envMap;
@@ -366,14 +343,14 @@ class HorizonWorldBuilder {
         roadCanvas.height = 512;
         const rCtx = roadCanvas.getContext('2d');
 
-        rCtx.fillStyle = '#161a24';
+        rCtx.fillStyle = '#292c31';
         rCtx.fillRect(0, 0, 512, 512);
 
         for (let i = 0; i < 9000; i++) {
             const x = Math.random() * 512;
             const y = Math.random() * 512;
-            const shade = 16 + Math.floor(Math.random() * 26);
-            rCtx.fillStyle = `rgb(${shade}, ${shade + 3}, ${shade + 9})`;
+            const shade = 22 + Math.floor(Math.random() * 44);
+            rCtx.fillStyle = `rgb(${shade}, ${shade + 2}, ${shade + 4})`;
             rCtx.fillRect(x, y, 2, 2);
         }
 
@@ -402,10 +379,8 @@ class HorizonWorldBuilder {
         lCtx.fillRect(488, 0, 10, 512);
 
         // Línea divisoria central discontinua (evita saturar el asfalto ni cortar sobre las marcas de frenado)
-        for (let y = 0; y < 512; y += 64) {
-            lCtx.fillStyle = 'rgba(250, 204, 21, 0.88)';
-            lCtx.fillRect(252, y + 8, 8, 34);
-        }
+        lCtx.fillStyle = 'rgba(245, 222, 162, 0.92)';
+        lCtx.fillRect(253, 32, 6, 245);
 
         this.textures.laneMarkings = this.configureTextureQuality(
             new THREE.CanvasTexture(laneCanvas),
@@ -655,6 +630,43 @@ class HorizonWorldBuilder {
         pCtx.arc(32, 32, 28, 0, Math.PI * 2);
         pCtx.fill();
         this.textures.roundParticle = new THREE.CanvasTexture(partCanvas);
+
+        const pine = document.createElement('canvas');
+        pine.width = 128;
+        pine.height = 256;
+        const brush = pine.getContext('2d');
+        brush.fillStyle = '#685849';
+        brush.fillRect(61, 29, 6, 226);
+        let state = 14587;
+        const random = () => {
+            state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+            return state / 4294967296;
+        };
+        for (let tier = 0; tier < 17; tier++) {
+            const tip = 3 + tier * 12;
+            const span = 6 + tier * 3.55;
+            for (let twig = 0; twig < 90; twig++) {
+                const x = (random() * 2 - 1) * span;
+                const y = tip + Math.abs(x) * 0.45 + random() * 19;
+                const shade = Math.round(88 + (1 - Math.abs(x) / span) * 25 + random() * 36);
+                brush.fillStyle = `rgb(${shade},${shade + 9},${shade})`;
+                brush.beginPath();
+                brush.arc(64 + x, y, 1.2 + random() * (2 + tier * 0.18), 0, Math.PI * 2);
+                brush.fill();
+            }
+        }
+        this.textures.pine = this.configureTextureQuality(new THREE.CanvasTexture(pine));
+
+        const contact = document.createElement('canvas');
+        contact.width = contact.height = 64;
+        const shadowBrush = contact.getContext('2d');
+        const shadow = shadowBrush.createRadialGradient(32, 32, 6, 32, 32, 32);
+        shadow.addColorStop(0, 'rgba(0,0,0,.80)');
+        shadow.addColorStop(0.55, 'rgba(0,0,0,.48)');
+        shadow.addColorStop(1, 'rgba(0,0,0,0)');
+        shadowBrush.fillStyle = shadow;
+        shadowBrush.fillRect(0, 0, 64, 64);
+        this.textures.carShadow = new THREE.CanvasTexture(contact);
     }
 
     createNeonSignTexture(textJP, textEN, bgHex, borderHex) {
@@ -673,11 +685,11 @@ class HorizonWorldBuilder {
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 36px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(textJP, 128, 56);
+        ctx.fillText(textJP, 128, 56, 213);
 
         ctx.fillStyle = borderHex;
         ctx.font = 'bold 22px sans-serif';
-        ctx.fillText(textEN, 128, 98);
+        ctx.fillText(textEN, 128, 98, 213);
 
         const tex = new THREE.CanvasTexture(canvas);
         tex.anisotropy = this.maxAnisotropy;
@@ -788,14 +800,24 @@ class HorizonWorldBuilder {
      * para evitar fugas de VRAM.
      */
     disposeWorldGroup() {
+        const materials = new Set();
+        const geometries = new Set();
         this.worldGroup.traverse((obj) => {
-            if (obj.geometry) {
-                obj.geometry.dispose();
-            }
+            if (obj.geometry) geometries.add(obj.geometry);
+            if (obj.material) [].concat(obj.material).forEach((material) => materials.add(material));
+            if (obj.isInstancedMesh) obj.dispose();
         });
-        while (this.worldGroup.children.length > 0) {
-            this.worldGroup.remove(this.worldGroup.children[0]);
+        const sharedTextures = new Set([this.envMap, ...Object.values(this.textures)]);
+        const textures = new Set();
+        for (const material of materials) {
+            for (const value of Object.values(material)) {
+                if (value?.isTexture && !sharedTextures.has(value)) textures.add(value);
+            }
+            material.dispose();
         }
+        textures.forEach((texture) => texture.dispose());
+        geometries.forEach((geometry) => geometry.dispose());
+        this.worldGroup.clear();
     }
 
     buildMap(mapConfig) {
@@ -882,83 +904,171 @@ class HorizonWorldBuilder {
         if (mapConfig.hasVolcanMisti) this.buildVolcanMistiAndPacific();
         if (mapConfig.hasAndeanLake) this.buildLakeTiticacaAndAndeanTown();
 
-        this.buildStreetLightsWithSpotlights();
+        if (mapConfig.atmosphere.night) this.buildStreetLightsWithSpotlights();
+        this.buildRoadsideLandscape(mapConfig);
 
         if (mapConfig.hasSakura) {
             this.buildSakuraTreesAndPetals();
         }
     }
 
-    /**
-     * Crea un Domo Atmosférico 3D con degradado suave entre el cenit y el horizonte.
-     */
+    getSkyLightDirection(mapConfig) {
+        const { azimuth, elevation } = mapConfig.atmosphere;
+        const horizontal = Math.cos(elevation);
+        return new THREE.Vector3(Math.cos(azimuth) * horizontal, Math.sin(elevation), Math.sin(azimuth) * horizontal);
+    }
+
     buildSkyDome(mapConfig) {
-        const skyCanvas = document.createElement('canvas');
-        skyCanvas.width = 64;
-        skyCanvas.height = 256;
-        const ctx = skyCanvas.getContext('2d');
-        const grad = ctx.createLinearGradient(0, 0, 0, 256);
+        const skyMat = new THREE.ShaderMaterial({
+            side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false,
+            uniforms: {
+                zenith: { value: new THREE.Color(mapConfig.skyColorTop) },
+                middle: { value: new THREE.Color(mapConfig.skyColorMid) },
+                horizon: { value: new THREE.Color(mapConfig.skyColorHorizon) },
+                lightTint: { value: new THREE.Color(mapConfig.sunColor) },
+                lightDirection: { value: this.getSkyLightDirection(mapConfig) },
+                cloudCover: { value: mapConfig.atmosphere.clouds },
+                night: { value: Number(mapConfig.atmosphere.night) }
+            },
+            vertexShader: `
+                varying vec3 skyDirection;
+                void main() {
+                    skyDirection = position;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 zenith, middle, horizon, lightTint, lightDirection;
+                uniform float cloudCover, night;
+                varying vec3 skyDirection;
 
-        const toHex = (num) => '#' + (num || 0x0f172a).toString(16).padStart(6, '0');
-        grad.addColorStop(0.0, toHex(mapConfig.skyColorTop));
-        grad.addColorStop(0.52, toHex(mapConfig.skyColorMid || mapConfig.skyColorTop));
-        grad.addColorStop(0.86, toHex(mapConfig.skyColorHorizon));
-        grad.addColorStop(1.0, toHex(mapConfig.fogColor || mapConfig.skyColorHorizon));
+                float hash(vec2 p) {
+                    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+                }
+                float noise(vec2 p) {
+                    vec2 cell = floor(p);
+                    vec2 f = fract(p);
+                    f = f * f * (3.0 - 2.0 * f);
+                    return mix(mix(hash(cell), hash(cell + vec2(1.0, 0.0)), f.x),
+                               mix(hash(cell + vec2(0.0, 1.0)), hash(cell + 1.0), f.x), f.y);
+                }
+                void main() {
+                    vec3 sky = normalize(skyDirection);
+                    float height = max(0.0, sky.y);
+                    float towardLight = max(0.0, dot(sky, lightDirection));
+                    vec3 color = mix(horizon, middle, smoothstep(-0.055, 0.33, sky.y));
+                    color = mix(color, zenith, smoothstep(0.12, 0.83, height));
+                    color = mix(color, lightTint, pow(towardLight, 16.0) * mix(0.36, 0.09, night));
+                    float disk = smoothstep(mix(0.99928, 0.99963, night), 0.99988, towardLight);
+                    color = mix(color, mix(vec3(1.0, 0.93, 0.75), vec3(0.74, 0.86, 1.0), night), disk);
 
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 64, 256);
-
-        const skyTex = new THREE.CanvasTexture(skyCanvas);
-        const skyGeo = new THREE.SphereGeometry(1650, 24, 16);
-        const skyMat = new THREE.MeshBasicMaterial({
-            map: skyTex,
-            side: THREE.BackSide,
-            depthWrite: false,
-            fog: false
+                    vec2 clouds = sky.xz * vec2(4.0, 6.5) / (0.24 + height);
+                    float billow = 0.59 * noise(clouds) + 0.27 * noise(clouds * 2.09 + 7.0)
+                        + 0.14 * noise(clouds * 4.17 - 13.0);
+                    float edge = 0.71 - 0.28 * cloudCover;
+                    float cloud = smoothstep(edge, edge + 0.17, billow) * smoothstep(0.015, 0.18, height);
+                    vec3 cloudTint = mix(mix(middle, vec3(0.96, 0.96, 0.94), pow(towardLight, 3.0) * 0.45 + 0.40), middle * 0.72, night);
+                    gl_FragColor = vec4(mix(color, cloudTint, cloud * mix(0.91, 0.50, night)), 1.0);
+                }
+            `
         });
+        const skyGeo = new THREE.SphereGeometry(1650, 32, 24);
         const skyDome = new THREE.Mesh(skyGeo, skyMat);
-        skyDome.position.y = -20;
+        skyDome.renderOrder = -100;
         this.worldGroup.add(skyDome);
     }
 
     /**
-     * Construye un anillo de montañas y colinas en el horizonte (1 InstancedMesh)
-     * para integrar el terreno con el cielo de forma realista.
+     * Dos crestas continuas aportan profundidad sin añadir objetos al trazado.
      */
     buildPerimeterMountains(mapConfig) {
-        let mountainColor = 0x1e293b;
-        if (mapConfig.runoffType === 'sand_desert') {
-            mountainColor = 0x9a7348; // Cerros áridos de Arequipa / Costa Norte
-        } else if (mapConfig.runoffType === 'sand_andean') {
-            mountainColor = 0x4b5c3b; // Cordillera de Cusco / Puno
-        } else if (mapConfig.runoffType === 'sand_warm') {
-            mountainColor = 0x374733; // Colinas de Hakone
+        const palettes = {
+            gravel_dark: [0x141b32, 0x31394b], sand_desert: [0x845e4e, 0xa68b79],
+            sand_andean: [0x405260, 0x8795a1], sand_warm: [0x334344, 0x6b6883]
+        };
+        const positions = [];
+        const colors = [];
+        const indices = [];
+        const steps = 144;
+        const urban = mapConfig.atmosphere.night;
+        const shade = new THREE.Color();
+        for (let layer = 0; layer < 2; layer++) {
+            const color = new THREE.Color(palettes[mapConfig.runoffType][layer]);
+            const offset = positions.length / 3;
+            for (let i = 0; i <= steps; i++) {
+                const angle = i / steps * Math.PI * 2;
+                const wave = 0.53 + Math.sin(angle * 5 + layer) * 0.19 + Math.cos(angle * 9 - layer) * 0.12;
+                const ridge = wave + Math.sin(angle * 23) * 0.07 + Math.cos(angle * 37) * 0.035;
+                const radius = 610 + layer * 385 + Math.cos(angle * 4 + layer) * 52;
+                const height = ridge * (urban ? 55 : 116) + layer * (urban ? 30 : 88);
+                for (let row = 0; row < 3; row++) {
+                    const distance = radius + (row - 2) * (layer ? 72 : 54);
+                    const y = row === 0 ? -1.4 : height * (row === 1 ? 0.43 : 1.0);
+                    positions.push(Math.cos(angle) * distance, y, Math.sin(angle) * distance);
+                    const slope = (Math.cos(angle * 9 - layer) - Math.sin(angle * 23)) * 0.10;
+                    shade.copy(color).multiplyScalar(0.78 + row * 0.13 + slope);
+                    colors.push(shade.r, shade.g, shade.b);
+                    if (i > 0 && row > 0) {
+                        const vertex = offset + i * 3 + row;
+                        indices.push(vertex - 4, vertex - 3, vertex - 1, vertex - 3, vertex, vertex - 1);
+                    }
+                }
+            }
         }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.setIndex(indices);
+        this.worldGroup.add(new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+    }
 
-        const peakGeo = new THREE.ConeGeometry(165, 130, 7);
-        const peakMat = new THREE.MeshStandardMaterial({
-            color: mountainColor,
-            roughness: 0.92,
-            metalness: 0.04
+    buildRoadsideLandscape(mapConfig) {
+        const forest = mapConfig.runoffType === 'sand_warm';
+        const desert = mapConfig.runoffType === 'sand_desert';
+        const urban = mapConfig.atmosphere.night;
+        const transforms = [];
+        const palette = (forest ? [0x779674, 0x81966d, 0xa78a65, 0x7b9573]
+            : desert ? [0x8b6545, 0xae845f, 0xc49a71]
+                : urban ? [0x2a3447, 0x3b4053, 0x50515f] : [0x727347, 0x5d663a, 0x929054]).map((color) => new THREE.Color(color));
+        const point = new THREE.Object3D();
+        for (let i = 0; i < this.trackPoints.length; i += 5) {
+            const center = this.trackPoints[i];
+            const next = this.trackPoints[(i + 1) % this.trackPoints.length];
+            const dx = next.x - center.x;
+            const dz = next.z - center.z;
+            const length = Math.hypot(dx, dz);
+            for (const side of [-1, 1]) {
+                for (let layer = 0; layer < (forest ? 2 : 1); layer++) {
+                    const seed = (i * 83 + side * 61 + layer * 23 + 503) % 101 / 101;
+                    const offset = side * (this.roadWidth / 2 + 9 + seed * (urban ? 12 : 22) + layer * 29);
+                    const x = center.x + dz / length * offset;
+                    const z = center.z - dx / length * offset;
+                    const width = (forest ? 2.4 : urban ? 3.2 : 0.65) + seed * (desert ? 4.8 : 2.2);
+                    if (!this.isPositionClearOfTrack(x, z, 2 + width * 1.5)) continue;
+                    const height = forest ? 11 + seed * 14 : urban ? 1.5 + seed * 4 : 0.6 + seed * 2.8;
+                    point.rotation.set(0, urban ? Math.atan2(dx, dz) : seed * Math.PI * 2, 0);
+                    point.scale.set(width * (forest ? 2.15 : 1), height, width * (urban ? 1.4 : 1));
+                    point.position.set(x, forest ? height * 0.5 - 0.6 : height * 0.34 - 0.65, z);
+                    point.updateMatrix();
+                    const color = palette[Math.floor(seed * palette.length)];
+                    transforms.push([point.matrix.clone(), color]);
+                    if (forest) {
+                        point.rotation.y += Math.PI / 2;
+                        point.updateMatrix();
+                        transforms.push([point.matrix.clone(), color]);
+                    }
+                }
+            }
+        }
+        const geometry = forest ? new THREE.PlaneGeometry(1, 1) : urban ? new THREE.BoxGeometry(1.6, 1, 2) : new THREE.IcosahedronGeometry(1, 0);
+        const material = forest ? new THREE.MeshBasicMaterial({ map: this.textures.pine, alphaTest: 0.38, side: THREE.DoubleSide })
+            : new THREE.MeshStandardMaterial({ roughness: 0.94 });
+        const landscape = new THREE.InstancedMesh(geometry, material, transforms.length);
+        transforms.forEach(([matrix, color], index) => {
+            landscape.setMatrixAt(index, matrix);
+            landscape.setColorAt(index, color);
         });
-
-        const count = 24;
-        const inst = new THREE.InstancedMesh(peakGeo, peakMat, count);
-        const dummy = new THREE.Object3D();
-
-        for (let i = 0; i < count; i++) {
-            const ang = (i / count) * Math.PI * 2;
-            const dist = 1080 + (i % 3) * 110;
-            const scaleY = 0.7 + ((i * 5) % 7) * 0.18;
-            const scaleXZ = 1.0 + (i % 4) * 0.25;
-            dummy.position.set(Math.cos(ang) * dist, (130 * scaleY) * 0.45 - 8, Math.sin(ang) * dist);
-            dummy.rotation.set(0, ang, 0);
-            dummy.scale.set(scaleXZ, scaleY, scaleXZ);
-            dummy.updateMatrix();
-            inst.setMatrixAt(i, dummy.matrix);
-        }
-        inst.instanceMatrix.needsUpdate = true;
-        this.worldGroup.add(inst);
+        this.worldGroup.add(landscape);
     }
 
     /**
@@ -1103,8 +1213,8 @@ class HorizonWorldBuilder {
 
         const roadMat = new THREE.MeshStandardMaterial({
             map: this.textures.road,
-            roughness: 0.36,
-            metalness: 0.22,
+            roughness: this.currentMap.atmosphere.night ? 0.27 : 0.82,
+            metalness: this.currentMap.atmosphere.night ? 0.23 : 0.05,
             envMap: this.envMap,
             envMapIntensity: 0.45
         });
@@ -1263,7 +1373,7 @@ class HorizonWorldBuilder {
         const skidMat = new THREE.MeshBasicMaterial({
             map: this.textures.skidMarks,
             transparent: true,
-            opacity: 0.65,
+            opacity: 0.30,
             depthWrite: false,
             polygonOffset: true,
             polygonOffsetFactor: -2,
@@ -1282,8 +1392,8 @@ class HorizonWorldBuilder {
 
         const railMat = new THREE.MeshStandardMaterial({
             map: this.textures.guardrail,
-            metalness: 0.85,
-            roughness: 0.25,
+            metalness: 0.59,
+            roughness: 0.48,
             envMap: this.envMap,
             side: THREE.DoubleSide
         });
@@ -1553,8 +1663,8 @@ class HorizonWorldBuilder {
 
         const isPeru = mapConfig && mapConfig.hasAutodromePits;
         const bannerTex = this.createNeonSignTexture(
-            isPeru ? '🏁 SALIDA / META • RACING.PE' : '🏁 SALIDA / META • 3 VUELTAS',
-            isPeru ? 'GRAN PREMIO NACIONAL DEL PERÚ' : 'HORIZON JAPAN GRAND PRIX',
+            'APEX ROUTES',
+            isPeru ? 'GRAN PREMIO DEL PERÚ' : 'GRAN PREMIO DE JAPÓN',
             '#090d16',
             isPeru ? '#ef4444' : '#00e5ff'
         );
@@ -1615,27 +1725,37 @@ class HorizonWorldBuilder {
     }
 
     buildMountFuji() {
-        const fujiGroup = new THREE.Group();
-        fujiGroup.position.set(-550, -2, -620);
-
-        const baseGeo = new THREE.ConeGeometry(380, 250, 36, 1, true);
-        const baseMat = new THREE.MeshStandardMaterial({ color: 0x263248, roughness: 0.85 });
-        const baseMesh = new THREE.Mesh(baseGeo, baseMat);
-        baseMesh.position.y = 125;
-        fujiGroup.add(baseMesh);
-
-        const snowGeo = new THREE.ConeGeometry(152, 104, 36);
-        const snowMat = new THREE.MeshStandardMaterial({
-            color: 0xf8fafc,
-            emissive: 0x475569,
-            emissiveIntensity: 0.28,
-            roughness: 0.45
+        const rings = [[410, -1], [305, 56], [209, 120], [139, 192], [101, 235], [34, 315], [16, 320], [0, 317]];
+        const positions = [];
+        const colors = [];
+        const indices = [];
+        const rock = new THREE.Color(0x596277);
+        const snow = new THREE.Color(0xe4dce0);
+        const color = new THREE.Color();
+        const segments = 56;
+        rings.forEach(([radius, height], ringIndex) => {
+            for (let i = 0; i <= segments; i++) {
+                const angle = i / segments * Math.PI * 2;
+                const ridge = Math.sin(angle * 13) * 0.14 + Math.cos(angle * 21) * 0.08;
+                const distance = radius * (1 + ridge * (ringIndex < 5 ? 0.6 : 0.23));
+                const y = height + ridge * (ringIndex === 4 ? 91 : 19);
+                positions.push(Math.cos(angle) * distance, y, Math.sin(angle) * distance);
+                color.copy(ringIndex >= 4 ? snow : rock).multiplyScalar(0.88 + Math.sin(angle - 2) * 0.13 + ridge * 0.24);
+                colors.push(color.r, color.g, color.b);
+                if (ringIndex && i) {
+                    const a = (ringIndex - 1) * (segments + 1) + i - 1;
+                    const b = a + segments + 1;
+                    indices.push(a, b, a + 1, a + 1, b, b + 1);
+                }
+            }
         });
-        const snowMesh = new THREE.Mesh(snowGeo, snowMat);
-        snowMesh.position.y = 198;
-        fujiGroup.add(snowMesh);
-
-        this.worldGroup.add(fujiGroup);
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.setIndex(indices);
+        const mountain = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+        mountain.position.set(720, -2, 695);
+        this.worldGroup.add(mountain);
     }
 
     buildTokyoTower() {
@@ -2129,9 +2249,11 @@ class HorizonWorldBuilder {
         // 1. Espejo de agua del Lago Titicaca (Puno)
         const lakeGeo = new THREE.PlaneGeometry(2400, 1050);
         const lakeMat = new THREE.MeshStandardMaterial({
-            color: 0x0369a1,
-            roughness: 0.14,
-            metalness: 0.72
+            color: 0x307d92,
+            roughness: 0.31,
+            metalness: 0.34,
+            envMap: this.envMap,
+            envMapIntensity: 0.65
         });
         const lake = new THREE.Mesh(lakeGeo, lakeMat);
         lake.rotation.x = -Math.PI / 2;
@@ -2141,8 +2263,28 @@ class HorizonWorldBuilder {
         // 2. Viviendas Andinas de Ladrillo y Tejado Terracota (estilo Cusco / Puno en las fotos aéreas)
         const wallGeo = new THREE.BoxGeometry(9.5, 6.2, 8.5);
         const roofGeo = new THREE.ConeGeometry(7.2, 3.2, 4);
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0xc26d48, roughness: 0.85 });
-        const roofMat = new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.75 });
+        const facade = document.createElement('canvas');
+        facade.width = facade.height = 128;
+        const brush = facade.getContext('2d');
+        brush.fillStyle = '#af8163';
+        brush.fillRect(0, 0, 128, 128);
+        brush.fillStyle = '#956750';
+        for (let y = 7; y < 128; y += 8) {
+            brush.fillRect(0, y, 128, 1);
+            for (let x = (y % 16 ? 0 : 8); x < 128; x += 16) brush.fillRect(x, y, 1, 8);
+        }
+        brush.fillStyle = '#473d36';
+        brush.fillRect(53, 71, 22, 57);
+        [19, 52, 85].forEach((x) => {
+            brush.fillStyle = '#d9b68b';
+            brush.fillRect(x - 2, 25, 22, 31);
+            brush.fillStyle = '#273338';
+            brush.fillRect(x, 27, 18, 26);
+            brush.fillStyle = '#48594e';
+            brush.fillRect(x + 8, 27, 2, 26);
+        });
+        const wallMat = new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(facade), roughness: 0.92 });
+        const roofMat = new THREE.MeshStandardMaterial({ color: 0x8f432e, roughness: 0.86 });
 
         const wallMats = [];
         const roofMats = [];
@@ -2273,6 +2415,39 @@ class HorizonWorldBuilder {
         });
     }
 
+    createCarShell(sections, material) {
+        const positions = [];
+        const indices = [];
+        const perimeter = 8;
+        sections.forEach(([z, width, bottom, top, crown], ring) => {
+            const seam = (top - bottom) * 0.22;
+            positions.push(
+                -width * 0.84, bottom, z, width * 0.84, bottom, z,
+                width, bottom + seam, z, width * 0.98, top - seam, z,
+                width * crown, top, z, -width * crown, top, z,
+                -width * 0.98, top - seam, z, -width, bottom + seam, z
+            );
+            if (!ring) return;
+            for (let i = 0; i < perimeter; i++) {
+                const a = (ring - 1) * perimeter + i;
+                const b = (ring - 1) * perimeter + (i + 1) % perimeter;
+                indices.push(a, b, a + perimeter, b, b + perimeter, a + perimeter);
+            }
+        });
+        const front = (sections.length - 1) * perimeter;
+        for (let i = 1; i < perimeter - 1; i++) {
+            indices.push(0, i + 1, i, front, front + i, front + i + 1);
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    }
+
     createCarMesh(carConfig, isPolice = false) {
         const carGroup = new THREE.Group();
         // Sub-grupo de carrocería suspendida (permite animar Pitch, Roll y Heave sin despegar las ruedas del asfalto)
@@ -2283,12 +2458,14 @@ class HorizonWorldBuilder {
         const style = dim.bodyStyle || 'gtr_aero';
 
         // Pintura metalizada multicapa (Clearcoat & Metallic Flake PBR)
-        const paintMat = new THREE.MeshStandardMaterial({
+        const paintMat = new THREE.MeshPhysicalMaterial({
             color: isPolice ? 0xf8fafc : carConfig.color,
-            roughness: 0.12,
-            metalness: 0.86,
+            roughness: 0.25,
+            metalness: 0.58,
+            clearcoat: 0.92,
+            clearcoatRoughness: 0.18,
             envMap: this.envMap,
-            envMapIntensity: 1.55
+            envMapIntensity: 1.28
         });
 
         const carbonMat = new THREE.MeshStandardMaterial({
@@ -2307,9 +2484,9 @@ class HorizonWorldBuilder {
         });
 
         const glassMat = new THREE.MeshStandardMaterial({
-            color: 0x060b16,
-            roughness: 0.05,
-            metalness: 0.96,
+            color: 0x111e29,
+            roughness: 0.16,
+            metalness: 0.73,
             envMap: this.envMap,
             envMapIntensity: 1.65
         });
@@ -2346,34 +2523,31 @@ class HorizonWorldBuilder {
         const isLowSupercar = (style === 'supercar_wedge' || style === 'sleek_rotary' || style === 'porsche_curve');
         const beltHeight = isLowSupercar ? dim.height * 0.36 : dim.height * 0.41;
 
-        const lowerChassis = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.98, beltHeight, dim.length * 0.96), paintMat);
-        lowerChassis.position.y = 0.24 + beltHeight * 0.5;
-        lowerChassis.castShadow = true;
-        lowerChassis.receiveShadow = true;
-        chassisGroup.add(lowerChassis);
-
-        // Hombros laterales biselados (dan curvatura 3D realista a las puertas y aletas)
-        [-1, 1].forEach((side) => {
-            const shoulderPanel = new THREE.Mesh(
-                new THREE.BoxGeometry(0.14, beltHeight * 0.72, dim.length * 0.88),
-                isPolice ? carbonMat : paintMat
-            );
-            shoulderPanel.position.set(side * (dim.width * 0.485), 0.28 + beltHeight * 0.45, -0.02);
-            shoulderPanel.rotation.z = side * 0.18;
-            shoulderPanel.castShadow = true;
-            chassisGroup.add(shoulderPanel);
-        });
+        const belt = 0.25 + beltHeight;
+        const halfWidth = dim.width * 0.5;
+        const crown = style === 'coupe_boxy' || style.startsWith('sedan') ? 0.91 : 0.80;
+        const nose = isLowSupercar ? 0.69 : 0.89;
+        chassisGroup.add(this.createCarShell([
+            [-0.50, halfWidth * 0.86, 0.29, belt * 0.88, crown],
+            [-0.45, halfWidth * 0.98, 0.24, belt, crown],
+            [-0.32, halfWidth * 1.09, 0.25, belt * 1.09, crown],
+            [-0.06, halfWidth, 0.27, belt * 1.04, crown],
+            [0.18, halfWidth * 0.98, 0.26, belt * 1.07, crown],
+            [0.32, halfWidth * 1.04, 0.25, belt * 1.03, crown],
+            [0.46, halfWidth * 0.96, 0.24, belt * nose + 0.09, crown],
+            [0.50, halfWidth * 0.83, 0.26, belt * nose, crown]
+        ].map(([z, width, bottom, top, cap]) => [z * dim.length, width, bottom, top, cap]), paintMat));
 
         // Pasos de rueda ensanchados (Widebody Fender Flares)
-        const archGeo = new THREE.CylinderGeometry(0.43, 0.43, 0.22, 16, 1, false, 0, Math.PI);
-        archGeo.rotateZ(Math.PI / 2);
+        const archGeo = new THREE.TorusGeometry(0.355, 0.038, 5, 12, Math.PI);
+        archGeo.rotateY(Math.PI / 2);
         const wheelZFront = dim.length * 0.31;
         const wheelZRear = -dim.length * 0.31;
         [
-            [-dim.width * 0.46, 0.39, wheelZFront],
-            [dim.width * 0.46, 0.39, wheelZFront],
-            [-dim.width * 0.46, 0.40, wheelZRear],
-            [dim.width * 0.46, 0.40, wheelZRear]
+            [-dim.width * 0.54, 0.36, wheelZFront],
+            [dim.width * 0.54, 0.36, wheelZFront],
+            [-dim.width * 0.55, 0.36, wheelZRear],
+            [dim.width * 0.55, 0.36, wheelZRear]
         ].forEach(([ax, ay, az]) => {
             const arch = new THREE.Mesh(archGeo, isPolice ? carbonMat : paintMat);
             arch.position.set(ax, ay, az);
@@ -2384,15 +2558,6 @@ class HorizonWorldBuilder {
         // 3. Capó delantero inclinado y parachoques frontal según el modelo real
         const hoodY = 0.24 + beltHeight + 0.04;
         const hoodSlope = isLowSupercar ? 0.16 : 0.10;
-        const noseMesh = new THREE.Mesh(
-            new THREE.BoxGeometry(dim.width * 0.91, dim.height * 0.19, dim.length * 0.36),
-            paintMat
-        );
-        noseMesh.position.set(0, hoodY, dim.length * 0.27);
-        noseMesh.rotation.x = hoodSlope;
-        noseMesh.castShadow = true;
-        noseMesh.receiveShadow = true;
-        chassisGroup.add(noseMesh);
 
         // Detalles icónicos de capó y parrilla según marca/estilo
         if (style === 'sedan_scoop') {
@@ -2442,49 +2607,37 @@ class HorizonWorldBuilder {
         }
 
         // Intercooler frontal metálico y rejilla inferior
-        const grilleIntake = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.68, 0.24, 0.06), carbonMat);
-        grilleIntake.position.set(0, 0.36, dim.length * 0.49);
-        const intercooler = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.48, 0.19, 0.07), chromeMat);
-        intercooler.position.set(0, 0.35, dim.length * 0.495);
-        chassisGroup.add(grilleIntake, intercooler);
+        const grilleIntake = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.64, 0.18, 0.07), carbonMat);
+        grilleIntake.position.set(0, 0.42, dim.length * 0.50);
+        chassisGroup.add(grilleIntake);
+        const grilleSlat = new THREE.BoxGeometry(dim.width * 0.52, 0.011, 0.013);
+        for (let row = 0; row < 3; row++) {
+            const slat = new THREE.Mesh(grilleSlat, carbonMat);
+            slat.position.set(0, 0.38 + row * 0.043, dim.length * 0.50 + 0.037);
+            chassisGroup.add(slat);
+        }
 
         // 4. Cabina Acristalada Aerodinámica (Parabrisas inclinado, Cristales laterales, Luneta Fastback y Techo)
-        const cabinTopY = isLowSupercar ? 1.12 : 1.21;
-        const cabinCenterZ = isLowSupercar ? -dim.length * 0.01 : -dim.length * 0.05;
-
-        const cabinCore = new THREE.Mesh(
-            new THREE.BoxGeometry(dim.width * 0.78, dim.height * 0.38, dim.length * 0.42),
-            glassMat
-        );
-        cabinCore.position.set(0, cabinTopY - 0.18, cabinCenterZ);
-        cabinCore.castShadow = true;
-        chassisGroup.add(cabinCore);
-
-        // Parabrisas delantero inclinado
-        const windshield = new THREE.Mesh(
-            new THREE.BoxGeometry(dim.width * 0.77, 0.06, dim.length * 0.24),
-            glassMat
-        );
-        windshield.position.set(0, cabinTopY - 0.12, cabinCenterZ + dim.length * 0.21);
-        windshield.rotation.x = 0.56;
-        chassisGroup.add(windshield);
-
-        // Luneta trasera Fastback inclinada
-        const rearWindow = new THREE.Mesh(
-            new THREE.BoxGeometry(dim.width * 0.75, 0.06, dim.length * 0.26),
-            glassMat
-        );
-        rearWindow.position.set(0, cabinTopY - 0.13, cabinCenterZ - dim.length * 0.22);
-        rearWindow.rotation.x = -0.48;
-        chassisGroup.add(rearWindow);
-
-        const roofPanel = new THREE.Mesh(
-            new THREE.BoxGeometry(dim.width * 0.75, 0.065, dim.length * 0.34),
-            (carConfig.id === 'nsx' || carConfig.id === 'm4_g82' || carConfig.id === 'r35') ? carbonMat : paintMat
-        );
-        roofPanel.position.set(0, cabinTopY, cabinCenterZ);
-        roofPanel.castShadow = true;
-        chassisGroup.add(roofPanel);
+        const cabinTopY = dim.height * 0.94;
+        const bodyLine = belt * 0.97;
+        const sedan = style.startsWith('sedan') || style === 'hatch_aero';
+        const rearRoofZ = sedan ? -0.18 : -0.13;
+        const frontRoofZ = isLowSupercar ? 0.09 : 0.035;
+        const roofMat = ['nsx', 'm4_g82', 'r35'].includes(carConfig.id) ? carbonMat : paintMat;
+        chassisGroup.add(this.createCarShell([
+            [-0.34, halfWidth * 0.82, bodyLine, bodyLine + 0.06, 0.91],
+            [rearRoofZ, halfWidth * 0.76, bodyLine, cabinTopY - 0.08, 0.70],
+            [rearRoofZ + 0.04, halfWidth * 0.77, bodyLine, cabinTopY - 0.024, 0.72],
+            [frontRoofZ, halfWidth * 0.77, bodyLine, cabinTopY - 0.024, 0.72],
+            [frontRoofZ + 0.025, halfWidth * 0.78, bodyLine, cabinTopY - 0.068, 0.73],
+            [0.26, halfWidth * 0.87, bodyLine, bodyLine + 0.07, 0.93]
+        ].map(([z, width, bottom, top, cap]) => [z * dim.length, width, bottom, top, cap]), glassMat));
+        chassisGroup.add(this.createCarShell([
+            [rearRoofZ, halfWidth * 0.54, cabinTopY - 0.093, cabinTopY - 0.074, 0.83],
+            [rearRoofZ + 0.04, halfWidth * 0.57, cabinTopY - 0.047, cabinTopY, 0.87],
+            [frontRoofZ - 0.025, halfWidth * 0.57, cabinTopY - 0.047, cabinTopY, 0.87],
+            [frontRoofZ + 0.026, halfWidth * 0.55, cabinTopY - 0.092, cabinTopY - 0.067, 0.85]
+        ].map(([z, width, bottom, top, cap]) => [z * dim.length, width, bottom, top, cap]), roofMat));
 
         // Retrovisores aerodinámicos con soporte
         const mirrorGeo = new THREE.BoxGeometry(0.24, 0.10, 0.15);
@@ -2527,9 +2680,12 @@ class HorizonWorldBuilder {
         }
 
         // 6. Difusor trasero y Sistema de Escape 3D
-        const rearDiffuser = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.86, 0.16, 0.14), carbonMat);
+        const rearDiffuser = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.86, 0.17, 0.18), carbonMat);
         rearDiffuser.position.set(0, 0.26, -dim.length * 0.485);
         chassisGroup.add(rearDiffuser);
+        const plate = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.088, 0.02), chromeMat);
+        plate.position.set(0, 0.46, -dim.length * 0.50 - 0.013);
+        chassisGroup.add(plate);
 
         const exhaustGeo = new THREE.CylinderGeometry(0.065, 0.065, 0.24, 12);
         exhaustGeo.rotateX(Math.PI / 2);
@@ -2571,28 +2727,37 @@ class HorizonWorldBuilder {
             const hlGeo = new THREE.BoxGeometry(0.38, 0.11, 0.09);
             [-1, 1].forEach((side) => {
                 const hl = new THREE.Mesh(hlGeo, headlightMat);
-                hl.position.set(side * (dim.width * 0.34), 0.59, dim.length * 0.485);
+                hl.position.set(side * (dim.width * 0.32), belt * nose - 0.022, dim.length * 0.50 + 0.007);
                 hl.rotation.y = -side * 0.14;
                 const drl = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.028, 0.095), drlAccentMat);
-                drl.position.set(side * (dim.width * 0.34), 0.53, dim.length * 0.49);
+                drl.position.set(side * (dim.width * 0.32), belt * nose - 0.065, dim.length * 0.50 + 0.010);
                 drl.rotation.y = -side * 0.14;
                 chassisGroup.add(hl, drl);
             });
         }
 
-        const brakeMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+        const tailZ = -dim.length * 0.50;
+        const tailY = belt * 0.88 - 0.071;
+        const fascia = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.80, 0.15, 0.055), carbonMat);
+        fascia.position.set(0, tailY, tailZ - 0.012);
+        chassisGroup.add(fascia);
+
+        const brakeMat = new THREE.MeshBasicMaterial({ color: 0xe94240 });
         if (dim.taillightStyle === 'quad_round') {
-            const roundGeo = new THREE.CylinderGeometry(0.105, 0.105, 0.06, 16);
-            roundGeo.rotateX(Math.PI / 2);
+            const roundGeo = new THREE.TorusGeometry(0.054, 0.017, 5, 16);
             [-0.66, -0.41, 0.41, 0.66].forEach((xOff) => {
                 const tl = new THREE.Mesh(roundGeo, brakeMat);
-                tl.position.set(xOff, 0.64, -dim.length * 0.485);
+                tl.position.set(xOff, tailY, tailZ - 0.042);
                 chassisGroup.add(tl);
             });
         } else {
-            const tlBar = new THREE.Mesh(new THREE.BoxGeometry(dim.width * 0.84, 0.11, 0.06), brakeMat);
-            tlBar.position.set(0, 0.65, -dim.length * 0.485);
-            chassisGroup.add(tlBar);
+            const fullWidth = dim.taillightStyle === 'wide_bar';
+            const lens = new THREE.BoxGeometry(dim.width * (fullWidth ? 0.74 : 0.22), 0.045, 0.030);
+            for (const x of fullWidth ? [0] : [-halfWidth * 0.54, halfWidth * 0.54]) {
+                const light = new THREE.Mesh(lens, brakeMat);
+                light.position.set(x, tailY, tailZ - 0.042);
+                chassisGroup.add(light);
+            }
         }
 
         let sirenLightRed = null;
@@ -2623,6 +2788,13 @@ class HorizonWorldBuilder {
         neonPlane.rotation.x = -Math.PI / 2;
         neonPlane.position.y = 0.05;
         carGroup.add(neonPlane);
+
+        const contactShadow = new THREE.Mesh(new THREE.PlaneGeometry(dim.width * 1.65, dim.length * 1.28),
+            new THREE.MeshBasicMaterial({ map: this.textures.carShadow, transparent: true, depthWrite: false,
+                polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
+        contactShadow.rotation.x = -Math.PI / 2;
+        contactShadow.position.y = 0.025;
+        carGroup.add(contactShadow);
 
         // 8. Llantas 3D Detalladas: Neumático de Perfil Bajo + Aro Metálico + 6 Radios 3D + Disco Ventilado + Pinza Brembo
         const wheels = [];

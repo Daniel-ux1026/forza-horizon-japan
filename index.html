@@ -3,12 +3,14 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#050811" />
+    <meta name="theme-color" content="#0b1518" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; base-uri 'none'" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <title>Forza Horizon 6: Japan & Peru Edition | Simcade 3D WebGL</title>
+    <title>Apex Routes | Japón y Perú</title>
+    <link rel="icon" href="assets/apex-routes.ico" />
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="css/styles.css?v=2.4" />
+    <link rel="stylesheet" href="css/styles.css?v=3" />
 </head>
 <body>
     <!-- Lienzo 3D WebGL / WebGPU con Iluminación ACES Filmic & Reflejos Metálicos -->
@@ -18,44 +20,28 @@
          1. PANTALLA DE BIENVENIDA CINEMATOGRÁFICA (ESTADO: WELCOME)
          ====================================================================== -->
     <section id="welcome-screen" class="menu-screen-overlay" aria-label="Pantalla de Bienvenida">
-        <div class="welcome-neon-particles" aria-hidden="true">
-            <span class="neon-orb orb-cyan"></span>
-            <span class="neon-orb orb-violet"></span>
-            <span class="neon-orb orb-crimson"></span>
-            <span class="neon-spark s1"></span>
-            <span class="neon-spark s2"></span>
-            <span class="neon-spark s3"></span>
-            <span class="neon-spark s4"></span>
-            <span class="neon-spark s5"></span>
-            <span class="neon-spark s6"></span>
-        </div>
-
         <div class="welcome-top-bar">
-            <span class="aaa-edition-pill">FESTIVAL HORIZON V2.0 • TOKIO • HAKONE • SHIBUYA • PERÚ GP</span>
-            <span class="aaa-tech-pill">THREE.JS WEBGL • 60 FPS HDR • AUDIO SYNTH</span>
+            <span class="welcome-signature">DANIEL OLIVOS</span>
         </div>
 
         <div class="welcome-hero-center">
-            <div class="logo-kicker">UNDERGROUND STREET &amp; AUTODROME RACING</div>
+            <div class="logo-kicker">JAPÓN / PERÚ</div>
             <h1 class="game-hero-logo">
-                <span class="logo-main">HORIZON</span>
-                <span class="logo-accent">JAPAN &amp; PERÚ</span>
-                <span class="logo-version">HEAT EDITION 6</span>
+                <span class="logo-main">APEX</span>
+                <span class="logo-accent">ROUTES</span>
             </h1>
             <p class="welcome-tagline">
-                8 Leyendas JDM en 3D • 5 Circuitos Oficiales • Colisiones Reales • Audio Electrónico Original
+                Carreras 3D entre autopistas nocturnas, puertos de montaña y circuitos del sur andino.
             </p>
 
             <button type="button" id="btn-press-start" class="btn-press-start">
-                <span class="start-glow-ring"></span>
-                <span class="start-btn-text">⚡ PULSA START</span>
-                <small class="start-btn-sub">CLIC, ENTER O BOTÓN A DEL MANDO PARA INICIAR</small>
+                <span class="start-btn-text">Entrar al juego</span>
+                <kbd class="start-btn-sub">↵</kbd>
             </button>
         </div>
 
         <div class="welcome-bottom-bar">
-            <span>🏎️ En Exhibición 3D: <strong id="welcome-showcase-car">Nissan Skyline GT-R V-Spec II (R34)</strong></span>
-            <span>🎵 El audio electrónico se activa tras tu primera interacción</span>
+            <span>12 autos · 5 circuitos · 3 modos</span>
         </div>
     </section>
 
@@ -67,8 +53,8 @@
             <!-- Columna Izquierda: Marca y Navegación Principal -->
             <div class="main-menu-nav-panel">
                 <div class="menu-brand-header">
-                    <span class="menu-brand-kicker">FESTIVAL PRINCIPAL • TEMPORADA NOCTURNA</span>
-                    <h2>HORIZON <span>HEAT 6</span></h2>
+                    <span class="menu-brand-kicker">JAPÓN / PERÚ</span>
+                    <h2>APEX <span>ROUTES</span></h2>
                 </div>
 
                 <nav class="main-menu-buttons" aria-label="Opciones del Menú Principal">
@@ -85,7 +71,7 @@
                         <span class="nav-btn-icon">🏎️</span>
                         <span class="nav-btn-copy">
                             <strong>GARAJE</strong>
-                            <small>Visor 3D 360°, 8 autos JDM, pintura y tuning</small>
+                            <small>12 autos, pintura y preparación</small>
                         </span>
                         <span class="nav-btn-arrow">→</span>
                     </button>
@@ -131,7 +117,7 @@
                     <small id="menu-active-mode-name">🏁 Carrera Oficial (3 Vueltas vs 6 Rivales)</small>
                 </div>
                 <div class="showcase-quick-actions">
-                    <button type="button" id="btn-menu-quick-race" class="btn-hud-action primary">⚡ Carrera Rápida con Selección Actual</button>
+                    <button type="button" id="btn-menu-quick-race" class="btn-hud-action primary">Carrera rápida</button>
                     <button type="button" class="btn-icon js-mute-toggle" title="Silenciar / Activar Audio">🔊 Audio Activo</button>
                 </div>
             </div>
@@ -243,7 +229,7 @@
                 </div>
 
                 <div class="garage-catalog-banner">
-                    <span class="catalog-brand-title">🌸 FORZA HORIZON JAPAN</span>
+                    <span class="catalog-brand-title">APEX ROUTES</span>
                     <span class="catalog-section-sub">GARAJE / SELECCIÓN DE AUTOS (12 MODELOS 3D)</span>
                 </div>
                 <div id="cars-selector-grid" class="cars-grid-twelve"></div>
@@ -382,11 +368,11 @@
                             <span class="badge-pill">InstancedMesh GPU</span>
                         </div>
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
-                            <span style="font-size:12px;color:#cbd5e1;">Calidad Gráfica WebGL:</span>
+                            <label for="quality-preset-select" style="font-size:12px;color:#cbd5e1;">Calidad gráfica</label>
                             <select id="quality-preset-select" class="track-select-compact" style="max-width:200px;padding:7px;">
-                                <option value="high">Calidad Ultra HDR (PC)</option>
-                                <option value="balanced">Equilibrado (60 FPS)</option>
-                                <option value="mobile">Optimización Móvil ASTC</option>
+                                <option value="high">Alto · hasta 1080p</option>
+                                <option value="balanced">Equilibrado · hasta 900p</option>
+                                <option value="mobile">Ligero · hasta 720p</option>
                             </select>
                         </div>
                         <div class="controls-legend" style="margin-top:10px;">
@@ -409,14 +395,8 @@
                  ============================================================== -->
             <div id="step-credits" class="menu-step-panel hidden">
                 <div class="credits-box">
-                    <h3>FORZA HORIZON JAPAN &amp; PERÚ • V2.0</h3>
-                    <p>Desarrollado con arquitectura modular en JavaScript ES6, Three.js WebGL y síntesis procedural Web Audio API.</p>
-                    <div class="credits-grid">
-                        <div class="credit-item"><span>DIRECCIÓN TÉCNICA Y MOTOR 3D</span><strong>Horizon Japan WebGL Studio</strong></div>
-                        <div class="credit-item"><span>FÍSICA VEHICULAR Y SUSPENSIÓN 4 RUEDAS</span><strong>Simcade Precision Dynamics V2.1</strong></div>
-                        <div class="credit-item"><span>ESCENARIOS JAPÓN Y AUTÓDROMOS DEL PERÚ</span><strong>Tokio, Hakone, Shibuya, Arequipa/Trujillo y Cusco/Puno</strong></div>
-                        <div class="credit-item"><span>SINTETIZADOR MUSICAL Y AUDIO DE MOTOR</span><strong>Web Audio Procedural FM &amp; Custom MP3 Deck</strong></div>
-                    </div>
+                    <h3>Apex Routes</h3>
+                    <p>Un juego de Daniel Olivos, desarrollado con Three.js y Web Audio API.</p>
                 </div>
             </div>
         </div>
@@ -453,9 +433,9 @@
             <!-- Información del Mapa, Posición (1/7), Vuelta (1/3) y Cronómetro -->
             <div class="hud-location-box hud-interactive">
                 <div class="hud-brand-tag">
-                    <span>HORIZON JAPAN 6</span>
+                    <span>APEX ROUTES</span>
                     <span id="hud-fps" class="badge-pill">60 FPS</span>
-                    <span id="quality-badge" class="badge-pill">ULTRA HDR PC</span>
+                    <span id="quality-badge" class="badge-pill">ALTO</span>
                 </div>
                 <div id="hud-map-name">Tokio: Autopista Shuto C1 &amp; Wangan</div>
                 <div id="hud-map-subtitle">CARRERA 3 VUELTAS • Dificultad: Media (Estándar)</div>
@@ -475,41 +455,44 @@
                 <div id="drift-chain-points">1,250 PTS × 2.0x</div>
             </div>
 
-            <!-- Reproductor de Radio Horizon Japón + Botones Rápidos -->
+            <!-- Radio y controles de carrera -->
             <div class="hud-right-stack hud-interactive">
-                <div class="radio-widget">
-                    <div class="radio-header">
-                        <span class="radio-station-badge">📻 RADIO HORIZON JAPÓN • <span class="js-track-genre">Synthwave</span></span>
-                        <div class="eq-bars" aria-hidden="true">
-                            <div class="eq-bar"></div>
-                            <div class="eq-bar"></div>
-                            <div class="eq-bar"></div>
-                            <div class="eq-bar"></div>
-                            <div class="eq-bar"></div>
-                            <div class="eq-bar"></div>
-                            <div class="eq-bar"></div>
-                            <div class="eq-bar"></div>
+                <details class="race-tools">
+                    <summary>Audio y controles</summary>
+                    <div class="radio-widget">
+                        <div class="radio-header">
+                            <span class="radio-station-badge">APEX RADIO · <span class="js-track-genre">Synthwave</span></span>
+                            <div class="eq-bars" aria-hidden="true">
+                                <div class="eq-bar"></div>
+                                <div class="eq-bar"></div>
+                                <div class="eq-bar"></div>
+                                <div class="eq-bar"></div>
+                                <div class="eq-bar"></div>
+                                <div class="eq-bar"></div>
+                                <div class="eq-bar"></div>
+                                <div class="eq-bar"></div>
+                            </div>
+                        </div>
+                        <div class="radio-track-info">
+                            <div class="js-track-title">Midnight Wangan Pulse</div>
+                            <div class="js-track-artist">Apex Pulse · Synthwave FM</div>
+                        </div>
+                        <div class="radio-controls-row">
+                            <button type="button" class="btn-icon js-prev-track" title="Canción Anterior">⏮</button>
+                            <button type="button" class="btn-icon js-play-toggle" title="Reproducir / Pausar">⏸</button>
+                            <button type="button" class="btn-icon js-next-track" title="Siguiente Canción (Tecla M)">⏭</button>
+                            <select class="track-select-compact js-track-select" aria-label="Elegir canción"></select>
                         </div>
                     </div>
-                    <div class="radio-track-info">
-                        <div class="js-track-title">Midnight Wangan Pulse</div>
-                        <div class="js-track-artist">Horizon Pulse Japan • Synthwave FM</div>
-                    </div>
-                    <div class="radio-controls-row">
-                        <button type="button" class="btn-icon js-prev-track" title="Canción Anterior">⏮</button>
-                        <button type="button" class="btn-icon js-play-toggle" title="Reproducir / Pausar">⏸</button>
-                        <button type="button" class="btn-icon js-next-track" title="Siguiente Canción (Tecla M)">⏭</button>
-                        <select class="track-select-compact js-track-select" aria-label="Elegir canción"></select>
-                    </div>
-                </div>
 
-                <div class="hud-quick-buttons">
-                    <button type="button" id="btn-open-garage" class="btn-hud-action primary">🏎️ Garaje / Tuning (G)</button>
-                    <button type="button" id="btn-pause-race" class="btn-hud-action">⏸ Pausa (ESC)</button>
-                    <button type="button" id="btn-camera-toggle" class="btn-hud-action">🎥 Cámara (C)</button>
-                    <button type="button" id="btn-reset-car" class="btn-hud-action">🏁 Reiniciar (R)</button>
-                    <button type="button" id="btn-toggle-touch" class="btn-hud-action">📱 Controles Táctiles</button>
-                </div>
+                    <div class="hud-quick-buttons">
+                        <button type="button" id="btn-open-garage" class="btn-hud-action">Garaje (G)</button>
+                        <button type="button" id="btn-camera-toggle" class="btn-hud-action">Cámara (C)</button>
+                        <button type="button" id="btn-reset-car" class="btn-hud-action">Reiniciar (R)</button>
+                        <button type="button" id="btn-toggle-touch" class="btn-hud-action">Controles táctiles</button>
+                    </div>
+                </details>
+                <button type="button" id="btn-pause-race" class="btn-hud-action race-pause" aria-label="Pausar carrera">Pausa</button>
             </div>
         </div>
 
@@ -517,7 +500,7 @@
         <div class="hud-bottom-bar">
             <div class="minimap-box hud-interactive">
                 <canvas id="minimap-canvas" width="160" height="130"></canvas>
-                <span class="minimap-caption">GPS: 🔴 TÚ • 🟡 6 RIVALES • 🔵 POLICÍA</span>
+                <span class="minimap-caption">MAPA DEL CIRCUITO</span>
             </div>
 
             <div class="speedometer-cluster hud-interactive">
@@ -595,7 +578,7 @@
     <div id="finish-race-modal" class="hidden">
         <div class="finish-card" style="width:620px;">
             <h2 id="finish-title" style="font-size:22px;font-weight:900;color:#fff;">🏆 ¡CARRERA FINALIZADA!</h2>
-            <p style="font-size:12px;color:#94a3b8;margin-top:4px;">Clasificación Oficial del Festival Horizon Japón (3 Vueltas)</p>
+            <p style="font-size:12px;color:#94a3b8;margin-top:4px;">Clasificación de Apex Routes</p>
             <div class="finish-stats-grid">
                 <div class="finish-stat-box">
                     <span>POSICIÓN FINAL</span>
@@ -635,16 +618,11 @@
         </div>
     </div>
 
-    <!-- three.js r128 local (funciona sin internet); respaldo a CDN si el archivo local faltara -->
+    <!-- Three.js r128 incluido para jugar sin conexión. -->
     <script src="vendor/three.min.js"></script>
-    <script>
-        if (!window.THREE) {
-            document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
-        }
-    </script>
-    <script src="js/data.js?v=2.4"></script>
-    <script src="js/audio.js?v=2.4"></script>
-    <script src="js/world.js?v=2.4"></script>
-    <script src="js/game.js?v=2.4"></script>
+    <script src="js/data.js?v=3"></script>
+    <script src="js/audio.js?v=3"></script>
+    <script src="js/world.js?v=3"></script>
+    <script src="js/game.js?v=3"></script>
 </body>
 </html>

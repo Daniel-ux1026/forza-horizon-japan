@@ -1,9 +1,26 @@
 {
-  "name": "forza-horizon-6-japan-webgl",
-  "version": "1.0.0",
-  "description": "Juego de conduccion simcade 3D en las calles de Japon (Tokio, Hakone, Shibuya) para PC y Android en navegador WebGL.",
+  "name": "apex-routes",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Juego de carreras 3D de Daniel Olivos, ambientado en Japón y Perú.",
+  "author": "Daniel Olivos",
+  "main": "desktop/main.cjs",
   "scripts": {
     "start": "node tools/server.mjs 8080",
-    "test": "node tests/verify-engine.mjs"
+    "test": "node tests/verify-engine.mjs",
+    "desktop": "electron .",
+    "build:portable": "electron-builder --win portable --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "io.github.danielux1026.apexroutes",
+    "productName": "Apex Routes",
+    "directories": { "output": "dist" },
+    "files": ["desktop/**", "index.html", "manifest.json", "css/**", "js/**", "vendor/**", "assets/**"],
+    "win": { "target": "portable", "icon": "assets/apex-routes.ico" },
+    "portable": { "artifactName": "Apex-Routes-${version}-Windows-x64-Portable.exe" }
   }
 }
